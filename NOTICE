@@ -1,0 +1,15 @@
+Ombuto OST
+Copyright 2026 Francois Botha
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes software and a typeface developed by third parties:
+Vue, Pinia, Vue Flow (which contains VueUse and D3 modules), Phosphor Icons,
+Workbox, and the Inter typeface by The Inter Project Authors (SIL Open Font
+License 1.1). The full list of what is shipped in the built app, with the
+licence each part is used under, is in THIRD-PARTY-NOTICES.md.
+
+"Opportunity Solution Tree" is Teresa Torres's term for a product discovery
+technique she created (https://www.producttalk.org/). This project is an
+independent implementation and is not affiliated with or endorsed by Teresa
+Torres or Product Talk.

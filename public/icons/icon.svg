@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The Ombuto seed on the Nocturne ground (#161826, src/ost/styles/theme.css). -->
+  <defs><linearGradient id="g" x1="153" y1="153" x2="871" y2="871" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#4e9e77"/><stop offset="45%" stop-color="#6dd4a0"/><stop offset="100%" stop-color="#56a67f"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="#161826"/>
+  <g transform="translate(256 256) scale(0.44) translate(-512 -512)"><path fill-rule="evenodd" fill="url(#g)" d="M512 153C709.45 153 871 314.55 871 512C871 709.45 709.45 871 512 871C314.55 871 153 709.45 153 512L153 181Q153 153 181 153ZM512 254C653.9 254 770 370.1 770 512C770 653.9 653.9 770 512 770C370.1 770 254 653.9 254 512L254 274Q254 254 274 254Z"/></g>
+</svg>

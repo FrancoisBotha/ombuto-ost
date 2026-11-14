@@ -28,11 +28,9 @@ It is a port of the tree editor from the enterprise app at
   - Assumption "owner" becomes a plain free-text field (there are no users).
   - Everyone can edit: there is no viewer role. Remove `canEdit` branching where it is simple to
     do so, otherwise hard-wire it to true.
-- **No Jira / Confluence wording anywhere** (code, UI copy, comments, tests, docs). The
-  enterprise app seeds default links such as "Confluence" and "Jira Epic" (`domain/rules.ts`,
-  `panel/panel-format.ts`, `LinksTab.vue`, `OpenQuestionsTab.vue`): the lite app has no default
-  links, just "Add link" with a name and a URL. `grep -ri "jira\|confluence"` over the repo
-  (excluding `node_modules`) must return nothing.
+- **No vendor-specific issue-tracker or wiki wording anywhere** (code, UI copy, comments,
+  tests, docs). The enterprise app seeds default links named after such tools; the lite app has
+  no default links, just "Add link" with a name and a URL.
 - Branding: "Ombuto OST". Keep the look of the enterprise canvas (tokens in
   `ost/styles/ost-tokens.css`, `ost-base.css`, and the palette in `content/css/theme.css`).
 

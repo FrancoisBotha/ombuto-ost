@@ -4,7 +4,7 @@ import { defineStore } from 'pinia';
 
 import { useOstTreeStore } from '@/ost/stores/ost-tree.store';
 
-import { type AutosaveStore, defaultAutosave } from './autosave';
+import { type AutosaveRecord, type AutosaveStore, defaultAutosave } from './autosave';
 import {
   DocumentFormatError,
   type OstDocument,
@@ -51,6 +51,11 @@ export const useDocumentStore = defineStore('document', () => {
   const handle = shallowRef<FileSystemFileHandle | null>(null);
   /** ISO time of the last save to a file. */
   const lastSavedAt = ref<string | null>(null);
+  /**
+   * Autosave is off: the working copy cannot be kept in this browser (its storage is full, blocked
+   * or missing), so only a saved file is safe. Follows every write: it clears when one goes through.
+   */
+  const autosaveFailed = ref(autosave.persistent === false);
   /** A file action that failed, in words for the user; cleared by clearError(). */
   const error = ref<string | null>(null);
   /** Counts the documents shown: a new value means another document is on screen (the canvas starts afresh). */
@@ -67,8 +72,17 @@ export const useDocumentStore = defineStore('document', () => {
     autosaveTimer = null;
     const doc = service.snapshot();
     const record = doc ? { doc, dirty: dirty.value, fileName: fileName.value, handle: handle.value, savedAt: lastSavedAt.value } : null;
-    // One write at a time, in order; a failed write (storage full or blocked) never breaks editing.
-    pendingWrite = pendingWrite.then(() => (record ? autosave.save(record) : autosave.clear())).catch(() => undefined);
+    // One write at a time, in order; a failed write (storage full or blocked) never breaks editing,
+    // but it is not silent: `autosaveFailed` tells the user to save a file.
+    pendingWrite = pendingWrite
+      .then(() => {
+        const store = autosave;
+        return (record ? store.save(record) : store.clear()).then(() => store.persistent !== false);
+      })
+      .then(
+        kept => void (autosaveFailed.value = !kept),
+        () => void (autosaveFailed.value = true),
+      );
     return pendingWrite;
   }
 
@@ -128,6 +142,7 @@ export const useDocumentStore = defineStore('document', () => {
   /** Test seam: where the working document is kept between visits. */
   function setAutosaveStore(store: AutosaveStore) {
     autosave = store;
+    autosaveFailed.value = store.persistent === false;
   }
 
   function clearError() {
@@ -141,8 +156,14 @@ export const useDocumentStore = defineStore('document', () => {
 
   /** Restores the document this browser was working on, if there is one. Call once at start-up. */
   async function init() {
+    let record: AutosaveRecord | null = null;
     try {
-      const record = await autosave.load();
+      record = await autosave.load();
+    } catch {
+      // Blocked storage: start from the empty state, and say that autosave is off.
+      autosaveFailed.value = true;
+    }
+    try {
       if (record) {
         await show(validateDocument(record.doc), {
           fileName: record.fileName,
@@ -153,7 +174,7 @@ export const useDocumentStore = defineStore('document', () => {
         });
       }
     } catch {
-      // Unreadable or blocked storage: start from the empty state rather than fail to start.
+      // A damaged autosave: start from the empty state rather than fail to start.
     } finally {
       ready.value = true;
     }
@@ -267,6 +288,7 @@ export const useDocumentStore = defineStore('document', () => {
     dirty,
     fileName,
     lastSavedAt,
+    autosaveFailed,
     error,
     pendingAction,
     session,

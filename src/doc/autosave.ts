@@ -19,6 +19,8 @@ export interface AutosaveRecord {
 }
 
 export interface AutosaveStore {
+  /** False when nothing written here outlives the tab (no browser storage): autosave is then off. */
+  persistent?: boolean;
   load(): Promise<AutosaveRecord | null>;
   save(record: AutosaveRecord): Promise<void>;
   clear(): Promise<void>;
@@ -90,4 +92,5 @@ export function memoryAutosave(initial: AutosaveRecord | null = null): AutosaveS
 }
 
 /** IndexedDB when the browser has it (it can be missing or blocked in private windows). */
-export const defaultAutosave = (): AutosaveStore => (typeof indexedDB === 'undefined' ? memoryAutosave() : indexedDbAutosave());
+export const defaultAutosave = (): AutosaveStore =>
+  typeof indexedDB === 'undefined' ? { ...memoryAutosave(), persistent: false } : indexedDbAutosave();

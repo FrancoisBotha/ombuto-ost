@@ -10,13 +10,14 @@
 
     <OverlayHost />
     <UnsavedChangesDialog v-if="doc.pendingAction" />
+    <UpdatePrompt />
   </div>
 </template>
 
 <script setup lang="ts">
 /**
  * The app shell: the top bar, then either the empty state (no document open) or the tree canvas,
- * and every overlay. On start it restores the document this browser was working on; while a
+ * every overlay, and the "new version" prompt. On start it restores the document this browser was working on; while a
  * document has changes not saved to a file, closing the tab asks first.
  *
  * The canvas page is keyed by the document session, so opening another document starts from a
@@ -26,6 +27,7 @@ import { onMounted } from 'vue';
 
 import { useDocumentStore } from '@/doc/document.store';
 import { useUnsavedWarning } from '@/doc/unsaved-warning';
+import UpdatePrompt from '@/pwa/UpdatePrompt.vue';
 
 import OverlayHost from '../overlays/OverlayHost.vue';
 import CanvasPage from '../pages/CanvasPage.vue';

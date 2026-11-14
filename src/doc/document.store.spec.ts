@@ -106,13 +106,16 @@ describe('document store', () => {
       await doc.init();
       expect(doc.ready).toBe(true);
       expect(doc.hasDocument).toBe(false);
+      // The storage itself works: autosave is not reported as off.
+      expect(doc.autosaveFailed).toBe(false);
     });
 
-    it('still starts when the browser storage cannot be read', async () => {
+    it('still starts when the browser storage cannot be read, and says that autosave is off', async () => {
       doc.setAutosaveStore({ load: () => Promise.reject(new Error('blocked')), save: async () => undefined, clear: async () => undefined });
       await doc.init();
       expect(doc.ready).toBe(true);
       expect(doc.hasDocument).toBe(false);
+      expect(doc.autosaveFailed).toBe(true);
     });
   });
 
@@ -206,11 +209,35 @@ describe('document store', () => {
       expect(autosave.saves).toHaveLength(1);
     });
 
-    it('a failing browser storage never breaks editing', async () => {
+    it('a failing browser storage never breaks editing, and says that autosave is off', async () => {
+      expect(doc.autosaveFailed).toBe(false);
       doc.setAutosaveStore({ load: async () => null, save: () => Promise.reject(new Error('quota')), clear: async () => undefined });
       await tree.patchNode('product-1', { title: 'Still works' });
       await expect(doc.flushAutosave()).resolves.toBeUndefined();
       expect(tree.byId('product-1')?.title).toBe('Still works');
+      expect(doc.autosaveFailed).toBe(true);
+    });
+
+    it('autosave is back on as soon as a write goes through again', async () => {
+      let full = true;
+      const inner = memoryAutosave();
+      doc.setAutosaveStore({ ...inner, save: record => (full ? Promise.reject(new Error('quota')) : inner.save(record)) });
+      await tree.patchNode('product-1', { title: 'One' });
+      await doc.flushAutosave();
+      expect(doc.autosaveFailed).toBe(true);
+      full = false;
+      await tree.patchNode('product-1', { title: 'Two' });
+      await doc.flushAutosave();
+      expect(doc.autosaveFailed).toBe(false);
+      expect((await inner.load())?.doc.nodes.find(n => n.id === 1)?.title).toBe('Two');
+    });
+
+    it('a browser with no storage to autosave into has autosave off from the start', async () => {
+      doc.setAutosaveStore({ ...memoryAutosave(), persistent: false });
+      expect(doc.autosaveFailed).toBe(true);
+      await tree.patchNode('product-1', { title: 'Kept in memory only' });
+      await doc.flushAutosave();
+      expect(doc.autosaveFailed).toBe(true);
     });
 
     it('what is autosaved is a plain, valid document', async () => {
