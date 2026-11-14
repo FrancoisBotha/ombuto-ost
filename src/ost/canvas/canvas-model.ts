@@ -34,11 +34,20 @@ export const laidOutNodes = (nodes: OstNode[], placed: Record<string, Placed>): 
  * `draggable` decides per node whether it can be dragged onto another to re-parent (never
  * products). Dragging never places a node: the canvas resets positions after every drag.
  * Vue Flow's own wrapper stays unfocusable — the node body (OstNode) is the focus target.
+ *
+ * `isNew` says which nodes Vue Flow has not been given before. Those carry the size of their
+ * layout box as `dimensions`: Vue Flow's visibility culling treats a node it has not measured yet
+ * (0 x 0) as visible, so without a size EVERY new node is mounted once, on screen or not — opening
+ * a 2,000-node tree mounted 2,000 nodes, a 20,000-node one froze the tab. With the size, only the
+ * nodes in view are ever mounted; Vue Flow replaces it with the measured size when it mounts one.
+ * Like `pinRendered` below, this leans on how Vue Flow 1.48.2 works inside (`dimensions` is its
+ * own field, taken over from the node it is given): re-test when the version changes.
  */
 export function toFlowNodes(
   visible: OstNode[],
   placed: Record<string, Placed>,
   draggable: (n: OstNode) => boolean = () => false,
+  isNew: (id: string) => boolean = () => false,
 ): Node<OstFlowNodeData>[] {
   return visible.map(n => {
     const p = placed[n.id];
@@ -51,6 +60,7 @@ export function toFlowNodes(
       connectable: false,
       selectable: false,
       focusable: false,
+      ...(isNew(n.id) ? { dimensions: { width: p.w, height: p.h } } : {}),
     };
   });
 }

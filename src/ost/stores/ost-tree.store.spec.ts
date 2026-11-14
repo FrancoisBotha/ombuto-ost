@@ -983,12 +983,6 @@ describe('OST tree store on a real document', () => {
     await expectInStep();
   });
 
-  it('archives a product', async () => {
-    expect(await tree.patchNode('product-1', { archived: true })).toBe(true);
-    expect(tree.byId('product-1')?.archived).toBe(true);
-    expect(stored(1)?.archived).toBe(true);
-  });
-
   it('rolls a refused patch back and leaves the document untouched', async () => {
     const before = service.snapshot();
     const refused = async (key: string, patch: Parameters<typeof tree.patchNode>[1], message: string) => {

@@ -33,7 +33,7 @@
         :maxlength="titleMax"
         data-cy="ost-panel-title"
         @focus="onTitleFocus"
-        @input="titleDirty = true"
+        @input="onTitleInput"
         @keydown.enter.prevent="blurTarget"
         @keydown.esc.prevent="cancelTitle"
         @blur="commitTitle"
@@ -85,7 +85,9 @@ import { computed, nextTick, ref, watch } from 'vue';
 
 import { PhCaretLeft, PhX } from '@phosphor-icons/vue';
 
-import { titleMax as titleMaxFor } from '../canvas/edit-rules';
+import { useLiveCommit } from '@/doc/pending-edits';
+
+import { TITLE_MIN, titleMax as titleMaxFor } from '../canvas/edit-rules';
 import { type PanelTab, panelTabsFor } from '../domain/derive';
 import { TYPE_BOX } from '../domain/rules';
 import { useOstTreeStore } from '../stores/ost-tree.store';
@@ -127,24 +129,47 @@ const shownError = computed(() => {
 const hideButton = ref<HTMLButtonElement | null>(null);
 const reopenButton = ref<HTMLButtonElement | null>(null);
 
-// ---- title: commit on Enter / blur, Escape cancels -----------------------------------------------
+// ---- title: saved a moment after typing stops and on Enter / blur; Escape cancels -------------------
 const title = ref(node.value?.title ?? '');
 /** The user has typed in the field since it was focused (a focused but untouched field follows the store). */
 const titleDirty = ref(false);
+/** The node the typed title belongs to, and its title when the field took focus (what Escape goes back to). */
+let typedFor: { key: string; initial: string } | null = null;
+
+// While typing: a title that would be accepted goes into the document; anything else waits for blur.
+const liveTitle = useLiveCommit(() => {
+  const target = typedFor ? tree.byId(typedFor.key) : undefined;
+  const next = title.value.trim();
+  if (!target || next.length < TITLE_MIN || next.length > titleMaxFor(target.type) || next === target.title) return;
+  void run(() => tree.patchNode(target.id, { title: next }));
+});
 
 watch(
   () => [node.value?.id, node.value?.title] as const,
   ([id, value], old) => {
-    // A new node always resets the draft; the same node unless the user has typed an edit of their own
-    // (e.g. a canvas rename committed while focus was moving into this field must show up here).
-    if (id !== old?.[0]) titleDirty.value = false;
+    // A new node always resets the draft (what was typed for the previous node is saved to it first);
+    // the same node unless the user has typed an edit of their own (e.g. a canvas rename committed
+    // while focus was moving into this field must show up here).
+    if (id !== old?.[0]) {
+      liveTitle.flush();
+      typedFor = null;
+      titleDirty.value = false;
+    }
     if (!titleDirty.value) title.value = value ?? '';
   },
 );
 
 /** Focus starts from the stored title unless an edit is already typed. */
 function onTitleFocus() {
-  if (!titleDirty.value) title.value = node.value?.title ?? '';
+  if (titleDirty.value) return;
+  title.value = node.value?.title ?? '';
+  typedFor = node.value ? { key: node.value.id, initial: node.value.title } : null;
+}
+
+function onTitleInput() {
+  titleDirty.value = true;
+  if (!typedFor && node.value) typedFor = { key: node.value.id, initial: node.value.title };
+  liveTitle.touch();
 }
 
 // A new selection starts with a clean error slot.
@@ -155,15 +180,21 @@ watch(
 
 const blurTarget = (event: Event) => (event.target as HTMLElement).blur();
 
-/** Escape reverts the typed title; focus stays in the field (a later blur has nothing to commit). */
+/** Escape puts back the title from before the edit; focus stays in the field (a later blur has nothing to commit). */
 function cancelTitle(event: KeyboardEvent) {
+  liveTitle.cancel();
   titleDirty.value = false;
-  title.value = node.value?.title ?? '';
+  const current = node.value;
+  const initial = typedFor && typedFor.key === current?.id ? typedFor.initial : current?.title;
+  if (current && initial !== undefined && initial !== current.title) void run(() => tree.patchNode(current.id, { title: initial }));
+  title.value = initial ?? '';
   (event.target as HTMLInputElement).select();
 }
 
 function commitTitle() {
+  liveTitle.cancel();
   titleDirty.value = false;
+  typedFor = null;
   const current = node.value;
   if (!current) return;
   const next = title.value.trim();

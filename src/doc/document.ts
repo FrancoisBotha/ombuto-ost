@@ -25,8 +25,20 @@ export const OWNER_MAX = 100;
 export const LINK_NAME_MAX = 100;
 export const LINK_URL_MAX = 2000;
 export const QUESTION_TEXT_MAX = 500;
-/** Far beyond any real tree; stops a hostile or broken file from freezing the tab. */
-export const MAX_NODES = 20000;
+export const MAX_LINKS_PER_NODE = 200;
+export const MAX_QUESTIONS_PER_NODE = 200;
+/**
+ * The largest tree the app opens or lets you build. Measured, not guessed: at this size opening,
+ * editing, collapsing and panning stay responsive in a desktop browser (the numbers are in
+ * README.md, "Limits"). Far beyond any real tree.
+ */
+export const MAX_NODES = 1000;
+/**
+ * The deepest a tree may be, counting the product as level 1. Only opportunities nest, and real
+ * trees stay well under 20 levels; the cap keeps every walk over the tree far from the call-stack
+ * limit and the canvas a size that can be drawn.
+ */
+export const MAX_DEPTH = 64;
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 export const DEFAULT_CONFIDENCE = 40;
@@ -65,7 +77,6 @@ export interface DocNode {
   owner: string | null;
   /** Order among siblings of the same type under one parent (products: among products). */
   sortOrder: number;
-  archived: boolean;
   createdDate: string | null;
   lastModifiedDate: string | null;
   links: DocLink[];
@@ -131,7 +142,6 @@ export function serializeDocument(doc: OstDocument): string {
     valueRating: n.valueRating,
     owner: n.owner,
     sortOrder: n.sortOrder,
-    archived: n.archived,
     createdDate: n.createdDate,
     lastModifiedDate: n.lastModifiedDate,
     links: n.links.map(l => ({ id: l.id, name: l.name, url: l.url })),
@@ -142,6 +152,34 @@ export function serializeDocument(doc: OstDocument): string {
 
 /** A structured copy with no shared references (what goes to IndexedDB, and what `open` keeps). */
 export const cloneDocument = (doc: OstDocument): OstDocument => JSON.parse(serializeDocument(doc)) as OstDocument;
+
+// ---- size ---------------------------------------------------------------------------------------
+
+const encoder = new TextEncoder();
+
+/** Bytes of `text` as it is written in the file: a JSON string, in UTF-8. */
+const jsonBytes = (text: string | null): number => (text === null ? 4 : encoder.encode(JSON.stringify(text)).length);
+
+/** More than the keys, numbers, dates, indentation and separators of one node / link / question can take. */
+const NODE_OVERHEAD_BYTES = 640;
+const LINK_OVERHEAD_BYTES = 110;
+const QUESTION_OVERHEAD_BYTES = 120;
+/** More than the format line, the name and the brackets around the nodes can take. */
+const ENVELOPE_BYTES = 2048;
+
+/**
+ * An upper bound on the bytes one node takes in the file. It depends only on the node's text, so
+ * moving or renumbering nodes never changes it, and the document service can keep a running total.
+ */
+export function nodeWeight(node: DocNode): number {
+  let bytes = NODE_OVERHEAD_BYTES + jsonBytes(node.title) + jsonBytes(node.notes) + jsonBytes(node.status) + jsonBytes(node.owner);
+  for (const l of node.links) bytes += LINK_OVERHEAD_BYTES + jsonBytes(l.name) + jsonBytes(l.url);
+  for (const q of node.questions) bytes += QUESTION_OVERHEAD_BYTES + jsonBytes(q.text);
+  return bytes;
+}
+
+/** The most `nodeWeight` a document's nodes may add up to: its file then fits in MAX_FILE_BYTES. */
+export const MAX_NODES_WEIGHT = MAX_FILE_BYTES - ENVELOPE_BYTES;
 
 /** Characters a file system refuses in a file name. */
 const UNSAFE_FILE_CHARS = new Set('<>:"/\\|?*');
@@ -181,6 +219,7 @@ function readDate(value: unknown, where: string, field: string): string | null {
 function readLinks(value: unknown, where: string, seen: Set<number>): DocLink[] {
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value)) fail(where, 'has links that are not a list');
+  if (value.length > MAX_LINKS_PER_NODE) fail(where, `has more than ${MAX_LINKS_PER_NODE} links`);
   return value.map(raw => {
     if (!isRecord(raw)) fail(where, 'has a link that is not an object');
     const { id, name, url } = raw;
@@ -196,6 +235,7 @@ function readQuestions(value: unknown, where: string, type: NodeType, seen: Set<
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value)) fail(where, 'has open questions that are not a list');
   if (value.length && type !== 'opportunity') fail(where, 'has open questions, which only opportunities can have');
+  if (value.length > MAX_QUESTIONS_PER_NODE) fail(where, `has more than ${MAX_QUESTIONS_PER_NODE} open questions`);
   return value.map(raw => {
     if (!isRecord(raw)) fail(where, 'has an open question that is not an object');
     const { id, text, done } = raw;
@@ -271,8 +311,6 @@ function readNode(raw: unknown, index: number, linkIds: Set<number>, questionIds
 
   const sortOrder = raw.sortOrder ?? 0;
   if (typeof sortOrder !== 'number' || !Number.isFinite(sortOrder)) fail(where, 'has an invalid sortOrder');
-  const archived = raw.archived ?? false;
-  if (typeof archived !== 'boolean') fail(where, 'has an invalid "archived" value');
 
   return {
     id,
@@ -286,7 +324,6 @@ function readNode(raw: unknown, index: number, linkIds: Set<number>, questionIds
     valueRating,
     owner,
     sortOrder,
-    archived,
     createdDate: readDate(raw.createdDate, where, 'createdDate'),
     lastModifiedDate: readDate(raw.lastModifiedDate, where, 'lastModifiedDate'),
     links: readLinks(raw.links, where, linkIds),
@@ -303,7 +340,7 @@ export function validateDocument(value: unknown): OstDocument {
   }
   if (typeof value.name !== 'string') fail('the tree', 'has no name');
   if (!Array.isArray(value.nodes)) fail('the tree', 'has no list of nodes');
-  if (value.nodes.length > MAX_NODES) fail('the tree', `has more than ${MAX_NODES} nodes`);
+  if (value.nodes.length > MAX_NODES) fail('the tree', `has more than ${MAX_NODES.toLocaleString('en')} nodes`);
 
   const linkIds = new Set<number>();
   const questionIds = new Set<number>();
@@ -320,19 +357,29 @@ export function validateDocument(value: unknown): OstDocument {
     if (!parent) fail(`node ${n.id}`, `refers to a parent (${n.parentId}) that is not in the file`);
     if (!ALLOWED[parent.type].includes(n.type)) fail(`node ${n.id}`, `is a ${n.type} under a ${parent.type}, which is not allowed`);
   }
-  // Every node must reach a product. The type matrix already rules out every loop except one made
-  // of opportunities, which would otherwise hang off nothing.
-  const rooted = new Set<number>();
+  // Every node must reach a product, within MAX_DEPTH levels. The type matrix already rules out
+  // every loop except one made of opportunities, which would otherwise hang off nothing.
+  const depths = new Map<number, number>();
   for (const start of nodes) {
-    const trail = new Set<number>();
+    const trail: DocNode[] = [];
+    const onTrail = new Set<number>();
     let current: DocNode | undefined = start;
-    while (current && !rooted.has(current.id) && current.parentId !== null) {
-      if (trail.has(current.id)) fail(`node ${start.id}`, 'is part of a loop of parents');
-      trail.add(current.id);
+    while (current && !depths.has(current.id) && current.parentId !== null) {
+      if (onTrail.has(current.id)) fail(`node ${start.id}`, 'is part of a loop of parents');
+      onTrail.add(current.id);
+      trail.push(current);
       current = byId.get(current.parentId);
     }
-    for (const id of trail) rooted.add(id);
+    // `current` is a product, or a node whose depth is already known.
+    let depth = current ? (depths.get(current.id) ?? 1) : 1;
+    if (current) depths.set(current.id, depth);
+    for (let i = trail.length - 1; i >= 0; i--) depths.set(trail[i].id, ++depth);
+    if (depth > MAX_DEPTH) fail('the tree', `is more than ${MAX_DEPTH} levels deep`);
   }
+
+  let weight = 0;
+  for (const n of nodes) weight += nodeWeight(n);
+  if (weight > MAX_NODES_WEIGHT) fail('the tree', 'holds more text than an Ombuto OST file can');
 
   return { format: DOCUMENT_FORMAT, version: DOCUMENT_VERSION, name: cleanDocumentName(value.name), nodes };
 }

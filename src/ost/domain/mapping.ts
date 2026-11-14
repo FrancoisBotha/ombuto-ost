@@ -7,7 +7,7 @@ import type { ApiNodeType, PatchNodeRequest, TreeNodeDTO } from '../ost.model';
 
 import { NODE_TYPES, type NodeType, type OstNode } from './types';
 
-export type NodePatch = Partial<Pick<OstNode, 'title' | 'note' | 'status' | 'conf' | 'priority' | 'value' | 'owner' | 'archived'>>;
+export type NodePatch = Partial<Pick<OstNode, 'title' | 'note' | 'status' | 'conf' | 'priority' | 'value' | 'owner'>>;
 
 export const toNodeType = (type: string): NodeType => {
   const t = type.toLowerCase() as NodeType;
@@ -42,7 +42,6 @@ export function fromDto(dto: TreeNodeDTO): OstNode {
     value: dto.valueRating ?? 0,
     owner: dto.owner ?? '',
     sortOrder: dto.sortOrder ?? 0,
-    archived: !!dto.archived,
     createdDate: dto.createdDate ?? null,
     lastModifiedDate: dto.lastModifiedDate ?? null,
     links: (dto.links ?? []).map(l => ({ id: l.id, name: l.name, url: l.url })),
@@ -60,6 +59,5 @@ export function toPatchBody(patch: NodePatch): PatchNodeRequest {
   if (patch.priority !== undefined) body.priority = patch.priority;
   if (patch.value !== undefined) body.valueRating = patch.value;
   if (patch.owner !== undefined) body.owner = patch.owner === '' ? null : patch.owner;
-  if (patch.archived !== undefined) body.archived = patch.archived;
   return body;
 }

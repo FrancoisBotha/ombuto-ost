@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises } from '@vue/test-utils';
 
 import * as files from '@/doc/file-access';
+import { registerPendingEdit } from '@/doc/pending-edits';
 
 import OstShell from './OstShell.vue';
 import { exampleRecord, key, mountShell, setupShellStores } from './shell.test-util';
@@ -159,6 +160,12 @@ describe('OstShell', () => {
       await second.w.get('[data-cy="ostUnsavedSave"]').trigger('click');
       await flushPromises();
       expect(io.downloadFile).toHaveBeenCalledTimes(1);
+      // A download cannot be confirmed: the dialog says so and waits, the tree is still open.
+      expect(second.w.get('[data-cy="ostUnsavedDownloaded"]').text()).toContain('cannot see whether it arrived');
+      expect(second.doc.name).toBe('Example: meal-planning app');
+      await second.w.get('[data-cy="ostUnsavedContinue"]').trigger('click');
+      await flushPromises();
+      expect(second.w.find('[data-cy="ostUnsavedDialog"]').exists()).toBe(false);
       expect(second.doc.name).toBe('Untitled tree');
     });
 
@@ -254,21 +261,36 @@ describe('OstShell', () => {
       expect(save).not.toHaveBeenCalled();
     });
 
-    it('Ctrl+S first commits the field being typed in, and gives focus back to it', async () => {
-      const { pinia, doc } = setupShellStores(exampleRecord());
+    it('Ctrl+S saves what is being typed in a field, and leaves the focus where it is', async () => {
+      const { pinia } = setupShellStores(exampleRecord());
       const w = await mountShell(OstShell, pinia, stubs);
       const field = w.get('[data-cy="stub-field"]').element as HTMLInputElement;
       field.focus();
       const order: string[] = [];
       field.addEventListener('blur', () => order.push('blur'));
-      vi.spyOn(doc, 'save').mockImplementation(async () => {
-        order.push('save');
-        return true;
-      });
+      const unregister = registerPendingEdit(() => order.push('typed text taken'));
+      io.downloadFile.mockImplementation(() => void order.push('saved'));
       window.dispatchEvent(key('s', { ctrlKey: true }));
       await flushPromises();
-      expect(order).toEqual(['blur', 'save']);
+      unregister();
+      expect(order[0]).toBe('typed text taken');
+      expect(order.at(-1)).toBe('saved');
+      expect(order).not.toContain('blur');
       expect(document.activeElement).toBe(field);
+    });
+
+    it('Ctrl+O counts text still being typed as an unsaved change: it asks before opening anything', async () => {
+      const { pinia, doc, tree } = setupShellStores(exampleRecord());
+      const w = await mountShell(OstShell, pinia, stubs);
+      expect(doc.dirty).toBe(false);
+      // A field holding text the document does not have yet.
+      const unregister = registerPendingEdit(() => void tree.patchNode('product-1', { note: 'typed, not blurred' }));
+      window.dispatchEvent(key('o', { ctrlKey: true }));
+      await flushPromises();
+      unregister();
+      expect(io.pickFileToOpen).not.toHaveBeenCalled();
+      expect(w.find('[data-cy="ostUnsavedDialog"]').exists()).toBe(true);
+      expect(tree.byId('product-1')?.note).toBe('typed, not blurred');
     });
 
     it('shortcuts wait while the unsaved-changes question is open', async () => {

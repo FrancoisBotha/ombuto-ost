@@ -140,7 +140,7 @@ const productCounts = computed(() => Object.fromEntries(tree.products.map(p => [
 const branchKeys = computed(() => {
   const roots = new Set(tree.roots.map(root => root.id));
   const parents = new Set(tree.nodes.map(node => node.parent).filter(Boolean));
-  return tree.nodes.filter(node => parents.has(node.id) && roots.has(tree.ancestors(node.id)[0]?.id ?? node.id)).map(node => node.id);
+  return tree.nodes.filter(node => parents.has(node.id) && roots.has(tree.rootOf(node.id))).map(node => node.id);
 });
 
 async function setAllCollapsed(collapsed: boolean) {
@@ -171,8 +171,7 @@ function onEnter(event: KeyboardEvent) {
 
 function jump(step: 1 | -1) {
   const inScope = new Set(tree.roots.map(r => r.id));
-  const rootOf = (key: string) => tree.ancestors(key)[0]?.id ?? key;
-  const matches = searchMatches(tree.nodes, ui.query, ui.hiddenTypes, n => inScope.has(rootOf(n.id)));
+  const matches = searchMatches(tree.nodes, ui.query, ui.hiddenTypes, n => inScope.has(tree.rootOf(n.id)));
   if (!matches.length) {
     cursor.value = -1;
     jumpStatus.value = ui.query.trim() ? 'No matching nodes on the canvas' : '';
@@ -195,8 +194,7 @@ function jump(step: 1 | -1) {
  */
 const chips = computed(() => {
   const inScope = new Set(tree.roots.map(r => r.id));
-  const rootOf = (key: string) => tree.ancestors(key)[0]?.id ?? key;
-  const counts = countByType(tree.nodes.filter(n => inScope.has(rootOf(n.id))));
+  const counts = countByType(tree.nodes.filter(n => inScope.has(tree.rootOf(n.id))));
   return CHIP_TYPES.map(type => ({ type, label: TYPE_BOX[type].label, count: counts[type], on: !ui.hiddenTypes[type] }));
 });
 </script>

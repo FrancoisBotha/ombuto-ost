@@ -5,8 +5,12 @@
  *
  * The rules a server would enforce live here: id allocation, `sortOrder` on create (append) and on
  * move (both sibling groups are renumbered 0..n-1), the allowed parent -> child matrix, no moves
- * under a descendant, cascade delete of a subtree, and the limits on every field. A refused write
- * rejects with a RuleError; the document is left untouched.
+ * under a descendant, cascade delete of a subtree, and every limit of the file format (field
+ * lengths, node count, depth, links and questions per node, total size). A refused write rejects
+ * with a RuleError; the document is left untouched.
+ *
+ * The service and the file format agree: whatever sequence of calls is made here, the document it
+ * holds is one `validateDocument` accepts, so the app never saves a file it cannot open again.
  */
 import { TITLE_MIN, titleMax } from '@/ost/canvas/edit-rules';
 import { nodeKey, toNodeType } from '@/ost/domain/mapping';
@@ -28,6 +32,11 @@ import {
   type DocNode,
   LINK_NAME_MAX,
   LINK_URL_MAX,
+  MAX_DEPTH,
+  MAX_LINKS_PER_NODE,
+  MAX_NODES,
+  MAX_NODES_WEIGHT,
+  MAX_QUESTIONS_PER_NODE,
   NOTES_MAX,
   OWNER_MAX,
   type OstDocument,
@@ -36,6 +45,7 @@ import {
   cloneDocument,
   defaultTitle,
   newNodeFields,
+  nodeWeight,
 } from './document';
 
 /** Which node types each patchable field applies to. */
@@ -47,7 +57,6 @@ const APPLICABLE: Record<keyof PatchNodeRequest, NodeType[] | 'all'> = {
   priority: ['opportunity'],
   valueRating: ['opportunity'],
   owner: ['assumption'],
-  archived: ['product'],
 };
 
 const isIntIn = (value: unknown, min: number, max: number): value is number =>
@@ -55,11 +64,63 @@ const isIntIn = (value: unknown, min: number, max: number): value is number =>
 
 const bySortOrder = (a: DocNode, b: DocNode) => a.sortOrder - b.sortOrder || a.id - b.id;
 
+/**
+ * Hands out ids that are unique and that the file format accepts (positive safe integers). Ids
+ * count up from the largest one in the document; if a file already uses the largest number there
+ * is, the smallest free id is used instead.
+ */
+class IdAllocator {
+  private next = 1;
+
+  constructor(private readonly used: () => number[]) {}
+
+  reset(): void {
+    this.next = this.used().reduce((a, b) => Math.max(a, b), 0) + 1;
+  }
+
+  take(): number {
+    if (Number.isSafeInteger(this.next)) return this.next++;
+    const taken = new Set(this.used());
+    let id = 1;
+    while (taken.has(id)) id++;
+    return id;
+  }
+}
+
+function toDto(node: DocNode, parentType: NodeType | undefined): TreeNodeDTO {
+  return {
+    key: nodeKey(node.type, node.id),
+    type: node.type.toUpperCase() as ApiNodeType,
+    id: node.id,
+    parentKey: parentType && node.parentId !== null ? nodeKey(parentType, node.parentId) : null,
+    title: node.title,
+    notes: node.notes || null,
+    status: node.status ? node.status.toUpperCase() : null,
+    confidence: node.confidence,
+    priority: node.priority,
+    valueRating: node.valueRating,
+    owner: node.owner,
+    sortOrder: node.sortOrder,
+    createdDate: node.createdDate,
+    lastModifiedDate: node.lastModifiedDate,
+    links: node.links.map(l => ({ ...l })),
+    questions: node.questions.map(q => ({ ...q })),
+  };
+}
+
+/** The tree as the store reads it: every node of `doc`, with its key and its parent's key. */
+export function readTree(doc: OstDocument): TreeNodeDTO[] {
+  const types = new Map(doc.nodes.map(n => [n.id, n.type]));
+  return doc.nodes.map(n => toDto(n, n.parentId === null ? undefined : types.get(n.parentId)));
+}
+
 export default class LocalDocumentService {
   private doc: OstDocument | null = null;
-  private nextNodeId = 1;
-  private nextLinkId = 1;
-  private nextQuestionId = 1;
+  private readonly nodeIds = new IdAllocator(() => (this.doc?.nodes ?? []).map(n => n.id));
+  private readonly linkIds = new IdAllocator(() => (this.doc?.nodes ?? []).flatMap(n => n.links.map(l => l.id)));
+  private readonly questionIds = new IdAllocator(() => (this.doc?.nodes ?? []).flatMap(n => n.questions.map(q => q.id)));
+  /** Running total of `nodeWeight` over the document (see MAX_NODES_WEIGHT). */
+  private weight = 0;
   private listener: () => void = () => {};
 
   // ---- document lifecycle ------------------------------------------------------------------------
@@ -72,10 +133,10 @@ export default class LocalDocumentService {
   /** Makes `doc` the working document. The service keeps its own copy. Does not count as a change. */
   open(doc: OstDocument): void {
     this.doc = cloneDocument(doc);
-    const max = (ids: number[]) => ids.reduce((a, b) => Math.max(a, b), 0);
-    this.nextNodeId = max(this.doc.nodes.map(n => n.id)) + 1;
-    this.nextLinkId = max(this.doc.nodes.flatMap(n => n.links.map(l => l.id))) + 1;
-    this.nextQuestionId = max(this.doc.nodes.flatMap(n => n.questions.map(q => q.id))) + 1;
+    this.nodeIds.reset();
+    this.linkIds.reset();
+    this.questionIds.reset();
+    this.weight = this.doc.nodes.reduce((sum, n) => sum + nodeWeight(n), 0);
   }
 
   close(): void {
@@ -110,11 +171,7 @@ export default class LocalDocumentService {
 
   /** Every node of the open document. */
   getTree(): Promise<TreeNodeDTO[]> {
-    return this.run(() => {
-      const doc = this.require();
-      const types = new Map(doc.nodes.map(n => [n.id, n.type]));
-      return doc.nodes.map(n => this.toDto(n, types));
-    });
+    return this.run(() => readTree(this.require()));
   }
 
   // ---- nodes ---------------------------------------------------------------------------------------
@@ -130,25 +187,28 @@ export default class LocalDocumentService {
         if (request.parentType === null || request.parentId === null) throw new RuleError('parentmissing');
         const parent = this.find(this.type(request.parentType), request.parentId, 'parentmissing');
         if (!ALLOWED[parent.type].includes(type)) throw new RuleError('invalidparent');
+        if (this.depth(parent) + 1 > MAX_DEPTH) throw new RuleError('toodeep');
         parentId = parent.id;
       }
+      if (doc.nodes.length >= MAX_NODES) throw new RuleError('toomanynodes');
       const title = request.title?.trim() ? this.title(type, request.title) : defaultTitle(type);
       const last = this.siblings(type, parentId).at(-1);
       const now = new Date().toISOString();
       const node: DocNode = {
-        id: this.nextNodeId++,
+        id: 0,
         type,
         parentId,
         title,
         notes: '',
         ...newNodeFields(type),
         sortOrder: last ? last.sortOrder + 1 : 0,
-        archived: false,
         createdDate: now,
         lastModifiedDate: now,
         links: [],
         questions: [],
       };
+      this.charge(nodeWeight(node));
+      node.id = this.nodeIds.take();
       doc.nodes.push(node);
       return this.toDto(node);
     });
@@ -190,8 +250,8 @@ export default class LocalDocumentService {
         }
         next.owner = body.owner?.trim() || null;
       }
-      if (body.archived !== undefined) next.archived = body.archived === true;
       // Every value was checked before anything is applied: a refused patch changes nothing.
+      this.charge(nodeWeight({ ...node, ...next }) - nodeWeight(node));
       Object.assign(node, next, { lastModifiedDate: new Date().toISOString() });
       return this.toDto(node);
     });
@@ -215,6 +275,7 @@ export default class LocalDocumentService {
         const parent = this.find(this.type(request.parentType), request.parentId, 'parentmissing');
         if (!ALLOWED[parent.type].includes(node.type)) throw new RuleError('invalidparent');
         if (parent.id === node.id || this.subtreeIds(node.id).has(parent.id)) throw new RuleError('cycle');
+        if (parent.id !== node.parentId && this.depth(parent) + this.height(node.id) > MAX_DEPTH) throw new RuleError('toodeep');
         newParentId = parent.id;
       }
       const oldParentId = node.parentId;
@@ -243,7 +304,11 @@ export default class LocalDocumentService {
       const node = this.find(this.type(type), id);
       const doomed = this.subtreeIds(node.id);
       doomed.add(node.id);
-      doc.nodes = doc.nodes.filter(n => !doomed.has(n.id));
+      doc.nodes = doc.nodes.filter(n => {
+        if (!doomed.has(n.id)) return true;
+        this.weight -= nodeWeight(n);
+        return false;
+      });
     });
   }
 
@@ -252,7 +317,10 @@ export default class LocalDocumentService {
   addLink(type: string, id: number, link: { name: string; url: string }): Promise<NodeLinkDTO> {
     return this.write(() => {
       const node = this.find(this.type(type), id);
-      const created = { id: this.nextLinkId++, name: this.linkName(link.name), url: this.linkUrl(link.url) };
+      if (node.links.length >= MAX_LINKS_PER_NODE) throw new RuleError('toomanylinks');
+      const created = { id: 0, name: this.linkName(link.name), url: this.linkUrl(link.url) };
+      this.charge(nodeWeight({ ...node, links: [...node.links, created] }) - nodeWeight(node));
+      created.id = this.linkIds.take();
       node.links.push(created);
       this.touch(node);
       return { ...created };
@@ -264,6 +332,8 @@ export default class LocalDocumentService {
       const { node, link } = this.findLink(linkId);
       const name = patch.name !== undefined ? this.linkName(patch.name) : link.name;
       const url = patch.url !== undefined ? this.linkUrl(patch.url) : link.url;
+      const links = node.links.map(l => (l === link ? { ...l, name, url } : l));
+      this.charge(nodeWeight({ ...node, links }) - nodeWeight(node));
       Object.assign(link, { name, url });
       this.touch(node);
       return { ...link };
@@ -273,7 +343,9 @@ export default class LocalDocumentService {
   deleteLink(linkId: number): Promise<void> {
     return this.write(() => {
       const { node, link } = this.findLink(linkId);
+      const before = nodeWeight(node);
       node.links.splice(node.links.indexOf(link), 1);
+      this.weight += nodeWeight(node) - before;
       this.touch(node);
     });
   }
@@ -283,7 +355,10 @@ export default class LocalDocumentService {
   addQuestion(opportunityId: number, text: string): Promise<OpenQuestionDTO> {
     return this.write(() => {
       const node = this.find('opportunity', opportunityId);
-      const created = { id: this.nextQuestionId++, text: this.questionText(text), done: false };
+      if (node.questions.length >= MAX_QUESTIONS_PER_NODE) throw new RuleError('toomanyquestions');
+      const created = { id: 0, text: this.questionText(text), done: false };
+      this.charge(nodeWeight({ ...node, questions: [...node.questions, created] }) - nodeWeight(node));
+      created.id = this.questionIds.take();
       node.questions.push(created);
       this.touch(node);
       return { ...created };
@@ -295,6 +370,8 @@ export default class LocalDocumentService {
       const { node, question } = this.findQuestion(questionId);
       const text = patch.text !== undefined ? this.questionText(patch.text) : question.text;
       const done = patch.done !== undefined ? patch.done === true : question.done;
+      const questions = node.questions.map(q => (q === question ? { ...q, text, done } : q));
+      this.charge(nodeWeight({ ...node, questions }) - nodeWeight(node));
       Object.assign(question, { text, done });
       this.touch(node);
       return { ...question };
@@ -304,7 +381,9 @@ export default class LocalDocumentService {
   deleteQuestion(questionId: number): Promise<void> {
     return this.write(() => {
       const { node, question } = this.findQuestion(questionId);
+      const before = nodeWeight(node);
       node.questions.splice(node.questions.indexOf(question), 1);
+      this.weight += nodeWeight(node) - before;
       this.touch(node);
     });
   }
@@ -419,28 +498,47 @@ export default class LocalDocumentService {
     return text;
   }
 
-  /** `types` (node id -> type) saves a lookup per node when a whole tree is converted. */
-  private toDto(node: DocNode, types?: Map<number, NodeType>): TreeNodeDTO {
-    const parentType =
-      node.parentId === null ? undefined : (types?.get(node.parentId) ?? this.require().nodes.find(n => n.id === node.parentId)?.type);
-    return {
-      key: nodeKey(node.type, node.id),
-      type: node.type.toUpperCase() as ApiNodeType,
-      id: node.id,
-      parentKey: parentType && node.parentId !== null ? nodeKey(parentType, node.parentId) : null,
-      title: node.title,
-      notes: node.notes || null,
-      status: node.status ? node.status.toUpperCase() : null,
-      confidence: node.confidence,
-      priority: node.priority,
-      valueRating: node.valueRating,
-      owner: node.owner,
-      sortOrder: node.sortOrder,
-      archived: node.archived,
-      createdDate: node.createdDate,
-      lastModifiedDate: node.lastModifiedDate,
-      links: node.links.map(l => ({ ...l })),
-      questions: node.questions.map(q => ({ ...q })),
-    };
+  /** Levels from the product down to `node`, both included (a product is 1). */
+  private depth(node: DocNode): number {
+    const byId = new Map(this.require().nodes.map(n => [n.id, n]));
+    let depth = 1;
+    let current = node;
+    // The bound only matters for a document that is already broken: never loop.
+    while (current.parentId !== null && depth <= MAX_DEPTH) {
+      const parent = byId.get(current.parentId);
+      if (!parent) break;
+      current = parent;
+      depth++;
+    }
+    return depth;
+  }
+
+  /** Levels in the subtree of `id`, itself included (a leaf is 1). */
+  private height(id: number): number {
+    const kids = new Map<number, number[]>();
+    for (const n of this.require().nodes) {
+      if (n.parentId === null) continue;
+      const bucket = kids.get(n.parentId);
+      if (bucket) bucket.push(n.id);
+      else kids.set(n.parentId, [n.id]);
+    }
+    let height = 0;
+    let level = [id];
+    while (level.length && height <= MAX_DEPTH) {
+      height++;
+      level = level.flatMap(parent => kids.get(parent) ?? []);
+    }
+    return height;
+  }
+
+  /** Counts `delta` more bytes of text against the size of one file; refuses growth past it. */
+  private charge(delta: number): void {
+    if (delta > 0 && this.weight + delta > MAX_NODES_WEIGHT) throw new RuleError('documenttoolarge');
+    this.weight += delta;
+  }
+
+  private toDto(node: DocNode): TreeNodeDTO {
+    const parentType = node.parentId === null ? undefined : this.require().nodes.find(n => n.id === node.parentId)?.type;
+    return toDto(node, parentType);
   }
 }

@@ -31,7 +31,6 @@ export function sampleDocument(now = new Date()): OstDocument {
       ...newNodeFields(type),
       ...fields,
       sortOrder: doc.nodes.filter(n => n.type === type && n.parentId === parent).length,
-      archived: false,
       createdDate: stamp,
       lastModifiedDate: stamp,
       links: links.map(l => ({ id: nextLinkId++, ...l })),

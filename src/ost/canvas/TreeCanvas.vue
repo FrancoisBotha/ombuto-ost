@@ -57,6 +57,7 @@
           @activate="activate(id)"
           @rename="startRename(id)"
           @rename-commit="commitRename(id, $event)"
+          @rename-draft="saveRenameDraft(id, $event)"
           @rename-cancel="cancelRename(id)"
           @delete="askDelete(id)"
           @reorder="reorder(id, $event)"
@@ -153,7 +154,16 @@ const keepRendered = computed<ReadonlySet<string>>(() => {
   const keys = [ui.editingId, ui.addMenuId].filter((key): key is string => !!key);
   return keys.length ? new Set(keys) : NONE;
 });
-const flowNodes = computed(() => toFlowNodes(visible.value, tree.placed, n => isDraggable(n) && ui.editingId !== n.id));
+/** Nodes already handed to Vue Flow (it has, or will measure, their size): see toFlowNodes. Not reactive on purpose. */
+const handedOver = new Set<string>();
+const flowNodes = computed(() =>
+  toFlowNodes(
+    visible.value,
+    tree.placed,
+    n => isDraggable(n) && ui.editingId !== n.id,
+    id => !handedOver.has(id),
+  ),
+);
 const flowEdges = computed(() => toFlowEdges(visible.value, tree.placed));
 // One pass over the nodes, shared by every node body (no per-node scans).
 const kidCounts = computed(() => childCounts(tree.nodes));
@@ -228,12 +238,17 @@ watch(keepRendered, applyPins, { flush: 'post' });
 // its rename field open reaches Vue Flow only now, so it is pinned here.
 watch(
   flowNodes,
-  () =>
-    nextTick(() => {
+  list => {
+    // Vue Flow has these now. A node that leaves (collapsed, deleted, out of scope) is dropped by
+    // Vue Flow too, and is new again when it comes back.
+    handedOver.clear();
+    for (const n of list) handedOver.add(n.id);
+    return nextTick(() => {
       snapToLayout(false);
       applyPins();
-    }),
-  { flush: 'post' },
+    });
+  },
+  { flush: 'post', immediate: true },
 );
 const legal = computed<ReadonlySet<string>>(() => {
   if (dragKey.value) return legalParents(dragKey.value, tree.nodes);
@@ -382,6 +397,17 @@ async function commitRename(key: string, title: string) {
     tree.clearError();
     ui.startEditing(key);
   }
+}
+
+/**
+ * A title still being typed (the field stays open): stored now, so a reload or a closed tab does
+ * not take it. A refusal is not reported here; the commit that ends the rename reports it.
+ */
+async function saveRenameDraft(key: string, title: string) {
+  const node = tree.byId(key);
+  if (ui.editingId !== key || !node || title === node.title) return;
+  const shown = tree.error;
+  if (!(await tree.patchNode(key, { title })) && tree.error !== shown) tree.clearError();
 }
 
 function cancelRename(key: string) {

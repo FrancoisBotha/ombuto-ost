@@ -1,7 +1,7 @@
 /**
- * Wire types of the tree service seam (see `@/doc/local-document-service`). They mirror the DTOs
- * the tree store has always consumed: upper-case enums, numeric ids, and a node key
- * ("opportunity-12") that names a node everywhere in the UI.
+ * The shapes the local document service (`@/doc/local-document-service`) hands to the tree store
+ * and takes from it: upper-case type and status names, the numeric ids stored in the file, and a
+ * node key ("opportunity-12") that names a node everywhere in the UI.
  */
 
 export type ApiNodeType = 'PRODUCT' | 'OUTCOME' | 'OPPORTUNITY' | 'SOLUTION' | 'ASSUMPTION' | 'EVIDENCE';
@@ -31,7 +31,6 @@ export interface TreeNodeDTO {
   valueRating: number | null;
   owner: string | null;
   sortOrder: number | null;
-  archived: boolean | null;
   createdDate: string | null;
   lastModifiedDate: string | null;
   links: NodeLinkDTO[] | null;
@@ -46,7 +45,7 @@ export interface CreateNodeRequest {
   title?: string;
 }
 
-/** PATCH body: absent = unchanged; null clears notes / owner. */
+/** A change to a node's fields: absent = unchanged; null clears notes / owner. */
 export interface PatchNodeRequest {
   title?: string;
   notes?: string | null;
@@ -55,7 +54,6 @@ export interface PatchNodeRequest {
   priority?: number;
   valueRating?: number;
   owner?: string | null;
-  archived?: boolean;
 }
 
 export interface MoveNodeRequest {

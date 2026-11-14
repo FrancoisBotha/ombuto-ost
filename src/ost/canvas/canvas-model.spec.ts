@@ -1,6 +1,36 @@
 import { describe, expect, it } from 'vitest';
 
-import { pinRendered } from './canvas-model';
+import { node } from '../domain/fixtures.test-util';
+import { layoutTree } from '../domain/layout';
+
+import { pinRendered, toFlowNodes } from './canvas-model';
+
+describe('toFlowNodes (only the nodes in view are ever mounted)', () => {
+  const nodes = [node('product-1', null), node('outcome-1', 'product-1'), node('outcome-2', 'product-1')];
+  const placed = layoutTree(nodes, { roots: ['product-1'], collapsed: {} });
+
+  it('gives a node Vue Flow has not seen the size of its layout box, so culling can leave it unmounted', () => {
+    const flow = toFlowNodes(
+      nodes,
+      placed,
+      () => false,
+      () => true,
+    ) as { id: string; dimensions?: { width: number; height: number } }[];
+    for (const n of flow) expect(n.dimensions).toEqual({ width: placed[n.id].w, height: placed[n.id].h });
+    expect(flow.every(n => n.dimensions!.width > 0 && n.dimensions!.height > 0)).toBe(true);
+  });
+
+  it('leaves the size of a node Vue Flow already has alone (Vue Flow measured it)', () => {
+    const flow = toFlowNodes(
+      nodes,
+      placed,
+      () => false,
+      id => id === 'outcome-2',
+    ) as { id: string; dimensions?: unknown }[];
+    expect(flow.map(n => 'dimensions' in n)).toEqual([false, false, true]);
+    expect(toFlowNodes(nodes, placed).some(n => 'dimensions' in n)).toBe(false);
+  });
+});
 
 describe('pinRendered (keep only the edited node rendered under visibility culling)', () => {
   const graph = (...ids: string[]) => new Map(ids.map(id => [id, { dragging: false }]));

@@ -25,7 +25,11 @@
       <p>
         Your tree, and nothing about you.
         <template v-if="doc.autosaveFailed">Normally a working copy is kept in this browser as well; right now it is not.</template>
-        <template v-else>A working copy is kept in this browser, on this device, so a refresh or a crash loses nothing.</template>
+        <template v-else>
+          A working copy is kept in this browser, on this device, and is brought up to date about a second after each change, typing
+          included. Reload the page, close the tab or lose power, and the tree comes back the next time you open the app here; at worst the
+          last second of typing is missing. Each tab keeps its own working copy.
+        </template>
         The files you save are ordinary <code>.ost</code> files on your own computer, to keep, copy or delete as you like.
       </p>
 

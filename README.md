@@ -37,17 +37,36 @@ That is the point of the app, so it is enforced rather than promised:
 
 ### What is stored, and where
 
-| What                                                    | Where                              | Leaves the device?    |
-| ------------------------------------------------------- | ---------------------------------- | --------------------- |
-| The tree you are working on (an autosaved working copy) | This browser's IndexedDB           | No                    |
-| Which branches are collapsed                            | This browser's localStorage        | No                    |
-| The app's own files, for offline use                    | This browser's cache storage       | No                    |
-| Trees you save                                          | `.ost` files wherever you put them | Only if you move them |
+| What                                                    | Where                                    | Leaves the device?    |
+| ------------------------------------------------------- | ---------------------------------------- | --------------------- |
+| The tree you are working on (an autosaved working copy) | This browser's IndexedDB                 | No                    |
+| Which branches are collapsed, and which tab is which    | This browser's local and session storage | No                    |
+| The app's own files, for offline use                    | This browser's cache storage             | No                    |
+| Trees you save                                          | `.ost` files wherever you put them       | Only if you move them |
 
 Clearing your browsing data removes the working copy, and a private window forgets it when it
 closes. **Save a file for anything you want to keep.** If the browser will not store the working
 copy at all (storage full or blocked), the indicator in the top bar says "Autosave is off — save a
 file".
+
+### What the working copy guarantees
+
+- **It follows your typing.** Every change, text still being typed in a field included, reaches
+  the working copy about a second later (0.3 s after the last key press, then 0.4 s), and at once
+  when the page is hidden, reloaded or closed. Reload, close the tab or lose power, and the tree
+  comes back the next time you open the app in this browser. At worst the last second of typing is
+  missing after a crash.
+- **Each tab has its own.** Two tabs of the app never write over each other. A tab keeps its
+  working copy across a reload. Opening the app in a new tab brings back the tree of the tab you
+  closed last; if every other copy belongs to a tab that is still open, the new tab starts empty.
+  Up to five working copies of closed tabs are kept; older ones are deleted.
+- **It is not a file.** The top bar says "Unsaved changes" until the tree is saved to a file, and
+  the browser asks before you close a tab with unsaved changes.
+- **A copy the app cannot read is kept, not dropped.** The app says so, and offers to save its raw
+  contents to your computer.
+- **The same file in two tabs.** If you open one `.ost` file in two tabs (Chrome, Edge), each tab
+  saves the whole tree. A tab does not overwrite a file that changed since it last read or wrote
+  it: it tells you and asks where to save instead.
 
 One honest limit: the site that serves the app (GitHub Pages, or your own server) can see that the
 app's files were fetched, as with any web page. It never sees your tree.
@@ -62,8 +81,9 @@ app's files were fetched, as with any web page. It never sees your tree.
   keep a list of open questions.
 - **Find your way**: search, filter by type, collapse branches, minimap, product picker.
 - **Save**: File > Save (Ctrl/Cmd+S) saves to a file on your computer. In Chrome and Edge, Save
-  writes back to the file you opened; in Firefox and Safari it downloads a copy. Ctrl/Cmd+O opens a
-  file.
+  writes back to the file you opened and the top bar says "Saved". In Firefox and Safari it
+  downloads a copy and the top bar says "Downloaded a copy": a web page cannot see whether a
+  download arrived, so check your downloads folder. Ctrl/Cmd+O opens a file.
 - **Export**: File > Export gives PNG, SVG or a Markdown outline.
 - **Install**: your browser's "Install app" puts Ombuto OST in its own window. It works offline
   either way.
@@ -94,7 +114,6 @@ and for AI agents:
       "valueRating": null,
       "owner": null,
       "sortOrder": 0,
-      "archived": false,
       "createdDate": "2026-01-02T03:04:05.000Z",
       "lastModifiedDate": "2026-01-02T03:04:05.000Z",
       "links": [{ "id": 1, "name": "Interview notes", "url": "https://example.com/notes" }],
@@ -110,9 +129,31 @@ and for AI agents:
   `questions` to opportunities; `confidence` and `owner` to assumptions.
 
 The format is defined in one place, [`src/doc/document.ts`](src/doc/document.ts), which also
-validates every file on open. A file that is not in this format is refused with a clear message.
-File content is only ever shown as text, and only `http:`, `https:` and `mailto:` links are
-clickable.
+validates every file on open. A file that is not in this format is refused with a clear message,
+and the tree that was open stays open. File content is only ever shown as text, and only `http:`,
+`https:` and `mailto:` links are clickable.
+
+### Limits
+
+The app refuses to open a file beyond these limits, and refuses an edit that would cross one, so
+it never saves a file it cannot open again.
+
+| Limit                          | Value                                                            |
+| ------------------------------ | ---------------------------------------------------------------- |
+| Nodes in a tree                | 1,000                                                            |
+| Depth (the product is level 1) | 64 levels                                                        |
+| Title                          | 2 to 200 characters (products 100, assumptions and evidence 500) |
+| Notes                          | 20,000 characters per node                                       |
+| Links, open questions          | 200 of each per node                                             |
+| File size                      | 20 MB                                                            |
+| Ids                            | whole numbers from 1 to 9,007,199,254,740,991                    |
+
+The node limit is a measured one. With 1,000 nodes (headless Chromium on a desktop PC, the built
+app) a tree opens in 0.2 to 0.4 s, adding a node takes 0.2 to 0.35 s, a rename 0.1 to 0.2 s, a
+pan step about 0.02 s and a key press in the notes under 0.005 s. Only the nodes in view are drawn, so
+size on screen is not the cost; the cost of an edit grows with the square of the node count
+(2,000 nodes: 0.5 to 0.8 s per added node; 5,000: about 3 s), which is why the limit is where it
+is.
 
 ## Develop
 
@@ -131,7 +172,7 @@ The service worker exists only in the built app (`npm run build` then `npm run p
 the dev server.
 
 Layout: `src/ost/` is the tree editor (canvas, panel, stores), `src/doc/` the document, file access
-and autosave, `src/export/` the PNG / SVG / Markdown export, `src/privacy/` the privacy indicator,
+and autosave (one working copy per tab: `autosave-slots.ts`), `src/export/` the PNG / SVG / Markdown export, `src/privacy/` the privacy indicator,
 `src/pwa/` the update prompt, and `config/` the Content Security Policy and the web manifest.
 
 ## Host it yourself

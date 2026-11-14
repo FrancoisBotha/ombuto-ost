@@ -1,4 +1,6 @@
 /** Turns a refused tree write into a short sentence for the UI. */
+import { MAX_DEPTH, MAX_LINKS_PER_NODE, MAX_NODES, MAX_QUESTIONS_PER_NODE } from '@/doc/document';
+
 import { TITLE_MIN, titleMax } from './canvas/edit-rules';
 import type { NodeType } from './domain/types';
 
@@ -23,6 +25,11 @@ const MESSAGES = {
   questionmissing: 'That question no longer exists.',
   questiontextinvalid: 'Questions need 1 to 500 characters.',
   nodocument: 'No tree is open.',
+  toomanynodes: `A tree can hold at most ${MAX_NODES.toLocaleString('en')} nodes. Delete some, or start another tree.`,
+  toodeep: `A tree can be at most ${MAX_DEPTH} levels deep.`,
+  toomanylinks: `A node can have at most ${MAX_LINKS_PER_NODE} links.`,
+  toomanyquestions: `An opportunity can have at most ${MAX_QUESTIONS_PER_NODE} open questions.`,
+  documenttoolarge: 'This tree holds as much text as one file can. Shorten some notes, or start another tree.',
 } as const;
 
 export type RuleKey = keyof typeof MESSAGES;

@@ -10,6 +10,7 @@ import { type NodePatch, fromDto, parseKey, toApiType, toPatchBody } from '../do
 import { ALLOWED, canReparent } from '../domain/rules';
 import type { NodeType, OstNode } from '../domain/types';
 import { RuleError, describeError } from '../ost-errors';
+import type { TreeNodeDTO } from '../ost.model';
 
 import { useOstUiStore } from './ost-ui.store';
 
@@ -32,7 +33,7 @@ export type OstService = Pick<
 export type OstServiceFactory = () => OstService;
 
 type PatchField = keyof NodePatch;
-const PATCH_FIELDS: PatchField[] = ['title', 'note', 'status', 'conf', 'priority', 'value', 'owner', 'archived'];
+const PATCH_FIELDS: PatchField[] = ['title', 'note', 'status', 'conf', 'priority', 'value', 'owner'];
 
 /**
  * The open document's tree: flat nodes (pre-order, parent pointers) and every action on them.
@@ -105,7 +106,20 @@ export const useOstTreeStore = defineStore('ostTree', () => {
     return counts;
   });
   const descendantCount = (key: string) => descendantCounts.value.get(key) ?? 0;
-  const ancestors = (key: string) => breadcrumb(key, nodes.value);
+  const ancestors = (key: string) => breadcrumb(key, index.value);
+  /**
+   * The product every node hangs under, computed once per structural change (O(n)): the list is
+   * in tree order, so a node's parent is always seen before the node.
+   */
+  const rootIds = computed(() => {
+    const list = nodes.value;
+    for (const n of list) void n.parent;
+    const roots = new Map<string, string>();
+    for (const n of toRaw(list)) roots.set(n.id, (n.parent && roots.get(n.parent)) || n.id);
+    return roots;
+  });
+  /** Key of the product `key` belongs to (itself for a product). */
+  const rootOf = (key: string): string => rootIds.value.get(key) ?? key;
 
   // ---- helpers -----------------------------------------------------------------------------------
   const fail = (err: unknown, fallback?: string, type?: NodeType) => {
@@ -148,27 +162,47 @@ export const useOstTreeStore = defineStore('ostTree', () => {
 
   // ---- actions: read -------------------------------------------------------------------------
   /**
-   * Reads the open document's tree and starts from a clean view. `keepCollapsed` is for the
-   * document this browser was already working on (restored after a reload): its collapsed branches
-   * are restored. Any other document starts fully expanded.
+   * Turns a document's nodes into the tree the canvas shows, and proves that tree can be laid out.
+   * Changes nothing in the store. Throws when the tree cannot be built: the caller must then leave
+   * whatever is open as it is.
    */
-  async function loadTree(options: { keepCollapsed?: boolean } = {}): Promise<boolean> {
+  function prepare(dtos: TreeNodeDTO[]): OstNode[] {
+    const ordered = orderTree(dtos.map(fromDto));
+    layoutTree(ordered, { roots: ordered.filter(n => n.type === 'product').map(n => n.id), collapsed: {} });
+    return ordered;
+  }
+
+  /**
+   * Puts a prepared tree on screen with a clean view. `keepCollapsed` is for the document this tab
+   * was already working on (restored after a reload): its collapsed branches are restored. Any
+   * other document starts fully expanded. Cannot fail.
+   */
+  function install(ordered: OstNode[], options: { keepCollapsed?: boolean } = {}) {
     const ui = useOstUiStore();
     reset();
     ui.reset();
-    try {
-      nodes.value = orderTree((await api().getTree()).map(fromDto));
-    } catch (err) {
-      fail(err, 'The tree could not be opened.');
-      return false;
-    }
+    nodes.value = ordered;
     if (options.keepCollapsed) {
       ui.restoreCollapsed();
-      ui.pruneCollapsed(new Set(nodes.value.map(n => n.id)));
+      ui.pruneCollapsed(new Set(ordered.map(n => n.id)));
     } else {
       ui.persistCollapsed();
     }
     loaded.value = true;
+  }
+
+  /** Reads the open document's tree and shows it (see `install`). False, with a message, when it cannot. */
+  async function loadTree(options: { keepCollapsed?: boolean } = {}): Promise<boolean> {
+    let ordered: OstNode[];
+    try {
+      ordered = prepare(await api().getTree());
+    } catch (err) {
+      reset();
+      useOstUiStore().reset();
+      fail(err, 'The tree could not be opened.');
+      return false;
+    }
+    install(ordered, options);
     return true;
   }
 
@@ -447,10 +481,13 @@ export const useOstTreeStore = defineStore('ostTree', () => {
     placed,
     descendantCount,
     ancestors,
+    rootOf,
     // actions
     setServiceFactory,
     clearError,
     reset,
+    prepare,
+    install,
     loadTree,
     patchNode,
     createNode,

@@ -6,7 +6,10 @@ import {
   DOCUMENT_NAME_MAX,
   DOCUMENT_VERSION,
   DocumentFormatError,
+  MAX_DEPTH,
+  MAX_LINKS_PER_NODE,
   MAX_NODES,
+  MAX_QUESTIONS_PER_NODE,
   cleanDocumentName,
   cloneDocument,
   defaultTitle,
@@ -79,7 +82,6 @@ describe('the .ost document format', () => {
         'valueRating',
         'owner',
         'sortOrder',
-        'archived',
         'createdDate',
         'lastModifiedDate',
         'links',
@@ -128,7 +130,6 @@ describe('the .ost document format', () => {
         valueRating: null,
         owner: null,
         sortOrder: 0,
-        archived: false,
         createdDate: null,
         lastModifiedDate: null,
         links: [],
@@ -148,7 +149,7 @@ describe('the .ost document format', () => {
       Object.assign(file, { extra: 1 });
       Object.assign(file.nodes[0], { __proto__: { polluted: true }, onclick: 'alert(1)', html: '<img src=x onerror=alert(1)>' });
       const [node] = validateDocument(file).nodes;
-      expect(Object.keys(node)).toHaveLength(16);
+      expect(Object.keys(node)).toHaveLength(15);
       expect(node).not.toHaveProperty('onclick');
       expect(node).not.toHaveProperty('html');
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
@@ -219,6 +220,50 @@ describe('the .ost document format', () => {
       rejects({ ...valid(), nodes }, /more than/);
     });
 
+    it('accepts a tree exactly MAX_DEPTH levels deep and refuses one level more, without recursing', () => {
+      const chain = (levels: number) => {
+        const nodes: Record<string, unknown>[] = [
+          { id: 1, type: 'product', parentId: null, title: 'Product' },
+          { id: 2, type: 'outcome', parentId: 1, title: 'Outcome' },
+        ];
+        for (let id = 3; id <= levels; id++) {
+          nodes.push({
+            id,
+            type: 'opportunity',
+            parentId: id - 1,
+            title: 'Opportunity',
+            status: 'exploring',
+            priority: 50,
+            valueRating: 3,
+          });
+        }
+        // Children before parents: the check must not depend on the order in the file.
+        return { ...valid(), nodes: nodes.reverse() };
+      };
+      expect(validateDocument(chain(MAX_DEPTH)).nodes).toHaveLength(MAX_DEPTH);
+      rejects(chain(MAX_DEPTH + 1), /more than \d+ levels deep/);
+      // Far past the call-stack depth of a recursive walk: still a clean refusal.
+      rejects(chain(MAX_NODES), /levels deep/);
+    });
+
+    it('refuses more links or open questions on a node than the app lets you add', () => {
+      const links = Array.from({ length: MAX_LINKS_PER_NODE + 1 }, (_, i) => ({ id: i + 1, name: 'Link', url: 'https://example.com' }));
+      rejects(withNode(0, { links }), /more than \d+ links/);
+      expect(() => validateDocument(withNode(0, { links: links.slice(1) }))).not.toThrow();
+      const questions = Array.from({ length: MAX_QUESTIONS_PER_NODE + 1 }, (_, i) => ({ id: i + 100, text: 'Why?' }));
+      rejects(withNode(2, { questions }), /more than \d+ open questions/);
+    });
+
+    it('refuses a tree whose text would not fit in one file when it is saved again', () => {
+      // 600 nodes of 20,000 astral characters: 24 MB of notes once written as UTF-8.
+      const notes = '😀'.repeat(10000);
+      const nodes = [
+        { id: 1, type: 'product', parentId: null, title: 'Product' },
+        ...Array.from({ length: 600 }, (_, i) => ({ id: i + 2, type: 'outcome', parentId: 1, title: 'Outcome', notes })),
+      ];
+      rejects({ ...valid(), nodes }, /more text than/);
+    });
+
     it('refuses bad ids and types, naming the node', () => {
       rejects(withNode(1, { id: 0 }), /entry 2 of "nodes" has no valid id/);
       rejects(withNode(1, { id: '2' }));
@@ -277,7 +322,6 @@ describe('the .ost document format', () => {
       rejects(withNode(4, { owner: 'k'.repeat(101) }), /invalid owner/);
       rejects(withNode(0, { sortOrder: '1' }), /invalid sortOrder/);
       rejects(withNode(0, { sortOrder: Infinity }));
-      rejects(withNode(0, { archived: 'yes' }), /invalid "archived"/);
       rejects(withNode(0, { createdDate: 'yesterday' }), /invalid createdDate/);
       rejects(withNode(0, { lastModifiedDate: 12345 }), /invalid lastModifiedDate/);
     });

@@ -184,6 +184,36 @@ describe('UpdatePrompt', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it('Reload with unsaved changes: once the working copy is stored, the browser is not made to ask "Leave site?"', async () => {
+    const { find, announce, tree, doc } = await mounted();
+    await announce();
+    await tree.patchNode('product-1', { title: 'Unsaved, but kept in the browser' });
+    expect(doc.warnsBeforeLeaving()).toBe(true);
+    await find().get('[data-cy="ost-update-reload"]').trigger('click');
+    await flushPromises();
+    expect(doc.warnsBeforeLeaving()).toBe(false);
+  });
+
+  it('Reload when the working copy could not be written: no reload yet, the prompt says to save a file, and the warning stays', async () => {
+    const { find, announce, tree, doc, registration, reload } = await mounted();
+    await announce();
+    expect(find().get('[data-cy="ost-update-text"]').text()).toContain('comes back after the reload');
+    // Storage fails only now, at the moment of the reload.
+    doc.setAutosaveStore({ load: async () => null, save: () => Promise.reject(new Error('quota')), clear: async () => undefined });
+    await tree.patchNode('product-1', { title: 'Would be lost' });
+    await find().get('[data-cy="ost-update-reload"]').trigger('click');
+    await flushPromises();
+    expect(registration.waiting!.messages).toEqual([]);
+    expect(reload).not.toHaveBeenCalled();
+    expect(find().get('[data-cy="ost-update-text"]').text()).toBe('A new version is ready. Save your tree to a file before you reload.');
+    expect(doc.warnsBeforeLeaving()).toBe(true);
+    // The user insists: the reload goes ahead, and the browser will ask.
+    await find().get('[data-cy="ost-update-reload"]').trigger('click');
+    await flushPromises();
+    expect(registration.waiting!.messages).toEqual([{ type: 'SKIP_WAITING' }]);
+    expect(doc.warnsBeforeLeaving()).toBe(true);
+  });
+
   it('Later hides the prompt and changes nothing', async () => {
     const { find, announce, registration, reload } = await mounted();
     await announce();

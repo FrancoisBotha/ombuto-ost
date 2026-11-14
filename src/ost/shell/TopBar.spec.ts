@@ -10,7 +10,7 @@ import { matchShortcut, shortcutLabel } from './shortcuts';
 
 vi.mock(import('@/doc/file-access'), async importOriginal => {
   const actual = await importOriginal();
-  return { ...actual, supportsFileHandles: vi.fn(() => false), downloadFile: vi.fn() };
+  return { ...actual, supportsFileHandles: vi.fn(() => false), pickFileToSave: vi.fn(), downloadFile: vi.fn() };
 });
 
 enableAutoUnmount(afterEach);
@@ -118,16 +118,28 @@ describe('TopBar', () => {
       expect(state.attributes('title')).toContain('kept in this browser');
     });
 
-    it('says "Saved" with the file name once saved', async () => {
+    it('says "Downloaded a copy" after a save that could only download: the app cannot know it arrived', async () => {
       const { w, tree, doc } = await bar();
       await tree.patchNode('product-1', { title: 'Edited' });
       await doc.save();
       await flushPromises();
       const state = w.get('[data-cy="ost-save-state"]');
-      expect(state.text()).toBe('Saved');
+      expect(state.text()).toBe('Downloaded a copy');
       expect(state.classes()).not.toContain('is-dirty');
-      expect(state.attributes('title')).toMatch(/^Saved to Example meal-planning app\.ost at \d/);
+      expect(state.attributes('title')).toMatch(/downloads as Example meal-planning app\.ost at \d.*cannot see whether it arrived/);
       expect(vi.mocked(files.downloadFile)).toHaveBeenCalledTimes(1);
+    });
+
+    it('says "Saved" with the file name once written to a file the user chose', async () => {
+      const { w, tree, doc } = await bar();
+      vi.mocked(files.supportsFileHandles).mockReturnValueOnce(true);
+      vi.mocked(files.pickFileToSave).mockResolvedValue({ name: 'meals.ost', kind: 'file' } as unknown as FileSystemFileHandle);
+      await tree.patchNode('product-1', { title: 'Edited' });
+      await doc.save();
+      await flushPromises();
+      const state = w.get('[data-cy="ost-save-state"]');
+      expect(state.text()).toBe('Saved');
+      expect(state.attributes('title')).toMatch(/^Saved to meals\.ost at \d/);
     });
 
     it('a restored document keeps its unsaved state across a reload', async () => {

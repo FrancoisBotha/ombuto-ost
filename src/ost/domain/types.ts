@@ -41,7 +41,6 @@ export interface OstNode {
   /** assumptions only: free-text owner ('' when unassigned) */
   owner: string;
   sortOrder: number;
-  archived: boolean;
   createdDate: string | null;
   lastModifiedDate: string | null;
   links: LinkRef[];

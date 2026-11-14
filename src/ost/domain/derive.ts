@@ -22,9 +22,12 @@ export function childrenOf(key: string, nodes: OstNode[]): OstNode[] {
   return nodes.filter(n => n.parent === key);
 }
 
-/** Ancestors from the root (product) down to the direct parent. Excludes the node itself. */
-export function breadcrumb(key: string, nodes: OstNode[]): OstNode[] {
-  const index = byKey(nodes);
+/**
+ * Ancestors from the root (product) down to the direct parent. Excludes the node itself. A caller
+ * that asks often passes its own key -> node index instead of the list, which is indexed per call.
+ */
+export function breadcrumb(key: string, nodes: OstNode[] | Map<string, OstNode>): OstNode[] {
+  const index = nodes instanceof Map ? nodes : byKey(nodes);
   const trail: OstNode[] = [];
   const seen = new Set<string>([key]);
   let current = index.get(key);

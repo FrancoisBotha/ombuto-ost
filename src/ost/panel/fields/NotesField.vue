@@ -9,14 +9,17 @@
       :maxlength="NOTES_MAX"
       data-cy="ost-notes"
       @focus="focused = true"
-      @blur="commit"
+      @input="live.touch"
+      @blur="onBlur"
     ></textarea>
   </div>
 </template>
 
 <script setup lang="ts">
 /**
- * Free-text notes; committed on blur.
+ * Free-text notes. What is typed reaches the document a moment after typing stops, and on blur, so
+ * a reload or a closed tab never takes more than the last instant of typing with it. The field
+ * itself is never rewritten while it has focus: the caret and the field's own undo stay intact.
  *
  * `change` carries a `settled(ok)` callback: when the save fails (the store rolls the note back),
  * the typed text is put back in the field and kept there — never wiped — so the user can copy it
@@ -25,6 +28,7 @@
 import { ref, watch } from 'vue';
 
 import { NOTES_MAX } from '@/doc/document';
+import { useLiveCommit } from '@/doc/pending-edits';
 
 import type { Settled } from '../panel-action';
 
@@ -46,7 +50,6 @@ watch(
 );
 
 function commit() {
-  focused.value = false;
   unsaved.value = null;
   if (draft.value === props.value) return;
   const sent = draft.value;
@@ -55,6 +58,14 @@ function commit() {
     unsaved.value = sent;
     if (!focused.value) draft.value = sent;
   });
+}
+
+const live = useLiveCommit(commit);
+
+function onBlur() {
+  live.cancel();
+  focused.value = false;
+  commit();
 }
 </script>
 

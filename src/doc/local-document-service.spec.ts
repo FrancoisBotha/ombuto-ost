@@ -18,7 +18,6 @@ function fixture(): OstDocument {
       notes: '',
       ...newNodeFields(type),
       sortOrder,
-      archived: false,
       createdDate: '2026-01-01T00:00:00.000Z',
       lastModifiedDate: '2026-01-01T00:00:00.000Z',
       links: [],
@@ -255,9 +254,7 @@ describe('LocalDocumentService', () => {
       expect(await rule(service.patchNode('outcome', 2, { status: 'EXPLORING' }))).toBe('fieldnotapplicable');
       expect(await rule(service.patchNode('solution', 5, { confidence: 50 }))).toBe('fieldnotapplicable');
       expect(await rule(service.patchNode('solution', 5, { owner: 'Kim' }))).toBe('fieldnotapplicable');
-      expect(await rule(service.patchNode('outcome', 2, { archived: true }))).toBe('fieldnotapplicable');
       expect(await rule(service.patchNode('outcome', 2, { nope: 1 } as never))).toBe('fieldnotapplicable');
-      expect((await service.patchNode('product', 1, { archived: true })).archived).toBe(true);
     });
 
     it('a refused patch changes nothing at all, even its valid fields', async () => {

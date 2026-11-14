@@ -3,7 +3,7 @@
  * Ctrl/Cmd+O opens a file. They replace the browser's own "save page" and "open file", which have
  * no use in this app.
  */
-import { nextTick, onBeforeUnmount, onMounted } from 'vue';
+import { onBeforeUnmount, onMounted } from 'vue';
 
 import { useDocumentStore } from '@/doc/document.store';
 
@@ -26,19 +26,12 @@ export function matchShortcut(event: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'me
 }
 
 /**
- * A field that commits on blur (a title, notes, a link) holds text the document does not have yet.
- * Blurring it first makes "Save" save what is on screen; focus goes straight back.
+ * Listens for the document shortcuts while the calling component is mounted.
+ *
+ * Text still being typed in a field is the document store's business: `request`, `save` and
+ * `saveAs` each take it into the document first (doc/pending-edits.ts), whichever way they are
+ * reached. Focus stays where it is.
  */
-async function commitFocusedField(): Promise<void> {
-  const active = document.activeElement;
-  if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) return;
-  active.blur();
-  await nextTick();
-  if (document.contains(active)) active.focus({ preventScroll: true });
-  await nextTick();
-}
-
-/** Listens for the document shortcuts while the calling component is mounted. */
 export function useDocumentShortcuts() {
   const doc = useDocumentStore();
 
@@ -53,7 +46,6 @@ export function useDocumentShortcuts() {
       return;
     }
     if (!doc.hasDocument) return;
-    await commitFocusedField();
     await (shortcut === 'save' ? doc.save() : doc.saveAs());
   }
 

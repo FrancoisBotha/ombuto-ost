@@ -9,6 +9,8 @@
         aria-label="Link name"
         :maxlength="LINK_NAME_MAX"
         data-cy="ost-link-name"
+        @focus="onFocus"
+        @input="liveName.touch"
         @keydown.enter.prevent="blurTarget"
         @keydown.esc.prevent="cancel($event)"
         @blur="commitName"
@@ -44,6 +46,8 @@
       placeholder="https://"
       :maxlength="LINK_URL_MAX"
       data-cy="ost-link-url"
+      @focus="onFocus"
+      @input="liveUrl.touch"
       @keydown.enter.prevent="blurTarget"
       @keydown.esc.prevent="cancel($event)"
       @blur="commitUrl"
@@ -54,7 +58,9 @@
 
 <script setup lang="ts">
 /**
- * One link: name + URL, edited inline (commit on Enter / blur, Escape reverts), openable, removable.
+ * One link: name + URL, edited inline, openable, removable. A valid name or URL reaches the document
+ * a moment after typing stops, and on Enter / blur (which is also when an invalid one is refused,
+ * with the reason); Escape puts back the link the row had when the field was focused.
  * Only an http(s) or mailto URL is rendered as a clickable link: a file may carry anything, and
  * nothing else is ever put in an href.
  */
@@ -63,6 +69,7 @@ import { computed, ref, watch } from 'vue';
 import { PhArrowSquareOut, PhX } from '@phosphor-icons/vue';
 
 import { LINK_NAME_MAX, LINK_URL_MAX } from '@/doc/document';
+import { useLiveCommit } from '@/doc/pending-edits';
 
 import { isSafeLinkUrl } from '../../domain/rules';
 import type { LinkRef } from '../../domain/types';
@@ -77,6 +84,22 @@ const invalid = ref<string | null>(null);
 const nameInput = ref<HTMLInputElement | null>(null);
 const urlInput = ref<HTMLInputElement | null>(null);
 let cancelling = false;
+/** The link when a field of the row took focus: what Escape goes back to. */
+let initial = { name: props.link.name, url: props.link.url };
+
+// While typing: only a value that would be accepted is saved; anything else waits for blur.
+const liveName = useLiveCommit(() => {
+  const next = name.value.trim();
+  if (next && next !== props.link.name) emit('save', { name: next });
+});
+const liveUrl = useLiveCommit(() => {
+  const next = url.value.trim();
+  if (isSafeLinkUrl(next) && next !== props.link.url) emit('save', { url: next });
+});
+
+function onFocus() {
+  initial = { name: props.link.name, url: props.link.url };
+}
 
 const openable = computed(() => isSafeLinkUrl(props.link.url));
 
@@ -102,14 +125,21 @@ const blurTarget = (event: Event) => (event.target as HTMLElement).blur();
 
 function cancel(event: KeyboardEvent) {
   cancelling = true;
-  name.value = props.link.name;
-  url.value = props.link.url;
+  liveName.cancel();
+  liveUrl.cancel();
+  const undo: { name?: string; url?: string } = {};
+  if (initial.name !== props.link.name) undo.name = initial.name;
+  if (initial.url !== props.link.url) undo.url = initial.url;
+  if (undo.name !== undefined || undo.url !== undefined) emit('save', undo);
+  name.value = initial.name;
+  url.value = initial.url;
   invalid.value = null;
   (event.target as HTMLInputElement).blur();
   cancelling = false;
 }
 
 function commitName() {
+  liveName.cancel();
   if (cancelling) return;
   const next = name.value.trim();
   if (!next) {
@@ -123,6 +153,7 @@ function commitName() {
 }
 
 function commitUrl() {
+  liveUrl.cancel();
   if (cancelling) return;
   const next = url.value.trim();
   if (!isSafeLinkUrl(next)) {

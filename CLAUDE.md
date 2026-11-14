@@ -42,6 +42,17 @@ loading the app's own static files.
 - All tree edits go through the local document service (`src/doc/local-document-service.ts`),
   which the tree store (`src/ost/stores/ost-tree.store.ts`) calls. The document store
   (`src/doc/document.store.ts`) owns New / Open / Save and autosave to IndexedDB.
+- **Never lose work, never save what cannot be reopened.** Three things keep that true; do not
+  work around them:
+  - Every limit in `src/doc/document.ts` is checked on open AND enforced by the document service
+    at the edit. A new limit goes in both places; `src/doc/service-format-agreement.spec.ts`
+    proves they agree.
+  - A text field that keeps a draft registers it with `src/doc/pending-edits.ts`
+    (`useLiveCommit`). The document store flushes those drafts before it saves, replaces or
+    autosaves for the last time, so no entry point has to know which field has the focus.
+  - Each tab has its own autosave slot (`src/doc/autosave-slots.ts`). Nothing may write a slot
+    another live tab holds, and an unreadable working copy is never deleted without the user
+    asking.
 - Colours come from the tokens in `src/ost/styles/` (`theme.css` holds the hex values once;
   `ost-tokens.css` assigns the roles). Do not hard-code colours in components.
 - Every address is relative (`base: './'`, manifest `scope` and `start_url`): the app must work

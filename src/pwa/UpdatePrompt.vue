@@ -26,15 +26,28 @@ const dismissed = ref(false);
 
 const visible = computed(() => watcher?.updateReady.value === true && !dismissed.value);
 
+/** A Reload was held back: the working copy could not be written, and the tree has unsaved changes. */
+const heldBack = ref(false);
+
 const message = computed(() => {
   if (!doc.hasDocument) return 'A new version of Ombuto OST is ready.';
   // With autosave off, a reload would lose whatever is not in a file yet.
-  if (doc.autosaveFailed) return 'A new version is ready. Save your tree to a file before you reload.';
+  if (doc.autosaveFailed || heldBack.value) return 'A new version is ready. Save your tree to a file before you reload.';
   return 'A new version is ready. Your tree is kept in this browser and comes back after the reload.';
 });
 
+/**
+ * The tree comes back after the reload only if the working copy really is in the browser's storage.
+ * When that write is confirmed, the browser's "Leave site?" question is skipped for this reload:
+ * it would contradict what the prompt just said. When it is not, and the prompt had promised the
+ * tree would come back, the click only corrects the message (save a file first); the next click
+ * reloads, and the browser then asks as usual.
+ */
 async function reload() {
-  await doc.flushAutosave();
+  const promised = doc.hasDocument && !doc.autosaveFailed && !heldBack.value;
+  const kept = await doc.flushAutosave();
+  if (kept) doc.clearToReload();
+  else if (promised && doc.warnsBeforeLeaving()) return void (heldBack.value = true);
   watcher?.apply();
 }
 

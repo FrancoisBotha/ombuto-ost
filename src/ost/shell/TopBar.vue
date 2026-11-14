@@ -12,7 +12,8 @@
         spellcheck="false"
         :maxlength="DOCUMENT_NAME_MAX"
         data-cy="ost-doc-name"
-        @focus="editing = true"
+        @focus="onFocus"
+        @input="live.touch"
         @keydown.enter.prevent="blurTarget"
         @keydown.esc.prevent="cancel"
         @blur="commit"
@@ -33,13 +34,15 @@
  * The slim top bar (54px): brand · File menu · the tree's name (editable) · saved / unsaved state ·
  * the privacy indicator on the right.
  *
- * The name commits on Enter / blur and Escape reverts. It is part of the file, so renaming is a
- * change to save like any other.
+ * The name reaches the document a moment after typing stops, and on Enter / blur; Escape puts back
+ * the name the field had when it was focused. It is part of the file, so renaming is a change to
+ * save like any other.
  */
 import { computed, ref, watch } from 'vue';
 
 import { DOCUMENT_NAME_MAX } from '@/doc/document';
 import { useDocumentStore } from '@/doc/document.store';
+import { useLiveCommit } from '@/doc/pending-edits';
 import PrivacyIndicator from '@/privacy/PrivacyIndicator.vue';
 
 import FileMenu from './FileMenu.vue';
@@ -48,6 +51,18 @@ const doc = useDocumentStore();
 
 const draft = ref(doc.name);
 const editing = ref(false);
+/** The name when the field took focus: what Escape goes back to. */
+let initial = doc.name;
+
+// While typing: a usable name goes into the document; an empty field waits for blur (which names it).
+const live = useLiveCommit(() => {
+  if (draft.value.trim() && draft.value.trim() !== doc.name) doc.rename(draft.value);
+});
+
+function onFocus() {
+  editing.value = true;
+  initial = doc.name;
+}
 
 // Follow the document (another file, a name cleaned on save) unless the user is typing.
 watch(
@@ -60,19 +75,26 @@ watch(
 const blurTarget = (event: Event) => (event.target as HTMLElement).blur();
 
 function cancel(event: KeyboardEvent) {
+  live.cancel();
+  if (doc.name !== initial) doc.rename(initial);
   draft.value = doc.name;
   (event.target as HTMLInputElement).select();
 }
 
 function commit() {
+  live.cancel();
   editing.value = false;
   if (draft.value.trim() !== doc.name) doc.rename(draft.value);
   draft.value = doc.name;
 }
 
+/** A download is a copy the app handed to the browser; it cannot see whether the browser kept it. */
+const downloaded = computed(() => doc.savedBy === 'download');
+
 const stateText = computed(() => {
   if (doc.dirty) return 'Unsaved changes';
-  return doc.fileName ? 'Saved' : '';
+  if (!doc.fileName) return '';
+  return downloaded.value ? 'Downloaded a copy' : 'Saved';
 });
 
 const stateTitle = computed(() => {
@@ -80,7 +102,9 @@ const stateTitle = computed(() => {
   if (!doc.fileName) return '';
   const at = doc.lastSavedAt ? new Date(doc.lastSavedAt) : null;
   const time = at && !Number.isNaN(at.getTime()) ? ` at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
-  return `Saved to ${doc.fileName}${time}`;
+  return downloaded.value
+    ? `A copy was sent to your browser’s downloads as ${doc.fileName}${time}. The app cannot see whether it arrived: look in your downloads folder.`
+    : `Saved to ${doc.fileName}${time}`;
 });
 </script>
 

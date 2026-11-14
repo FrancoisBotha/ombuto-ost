@@ -12,7 +12,7 @@
       data-cy="ost-rename-input"
       @keydown="onKeydown"
       @blur="onBlur"
-      @input="message = null"
+      @input="onInput"
       @pointerdown.stop
       @dblclick.stop
       @click.stop
@@ -28,6 +28,11 @@
  * left to show the message). Invalid titles on Enter stay in the field with inline feedback.
  * Emits once: commit(title) or cancel.
  *
+ * While the field is open, a valid title is also reported a moment after typing stops
+ * (`draft(title)`), and at once when the document is about to be saved, autosaved for the last time
+ * or replaced: the canvas stores it without closing the field, so a title being typed is never lost
+ * to a reload. Cancel first reports the title the field opened with, undoing those drafts.
+ *
  * Unmounted while still open (its node left the canvas: scope switch, collapse, page change, ...),
  * it settles like a blur — a valid draft commits, anything else cancels — so the canvas never keeps
  * a stale editingId that re-grabs focus when the node comes back. (The canvas also keeps the node
@@ -35,12 +40,14 @@
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 
+import { useLiveCommit } from '@/doc/pending-edits';
+
 import type { NodeType } from '../domain/types';
 
 import { titleMax, validateTitle } from './edit-rules';
 
 const props = withDefaults(defineProps<{ type: NodeType; label: string; value: string; error?: string | null }>(), { error: null });
-const emit = defineEmits<{ commit: [title: string]; cancel: [] }>();
+const emit = defineEmits<{ commit: [title: string]; cancel: []; draft: [title: string] }>();
 
 const input = ref<HTMLInputElement | null>(null);
 const draft = ref(props.value);
@@ -49,11 +56,29 @@ const max = titleMax(props.type);
 const messageId = `ost-rename-msg-${Math.random().toString(36).slice(2, 9)}`;
 let done = false;
 let frame = 0;
+/** A draft was reported: cancelling has to take it back. */
+let drafted = false;
+/** The title the field opened with. */
+const initial = props.value;
+
+const live = useLiveCommit(() => {
+  const check = validateTitle(props.type, draft.value);
+  if (done || !check.ok) return;
+  drafted = true;
+  emit('draft', check.title);
+});
+
+function onInput() {
+  message.value = null;
+  live.touch();
+}
 
 function finish(kind: 'commit' | 'cancel') {
   if (done) return;
+  live.cancel();
   if (kind === 'cancel') {
     done = true;
+    if (drafted) emit('draft', initial);
     emit('cancel');
     return;
   }

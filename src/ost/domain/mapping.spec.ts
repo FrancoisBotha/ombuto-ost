@@ -43,7 +43,6 @@ describe('OST mapping', () => {
       links: [],
       questions: [],
       sortOrder: 0,
-      archived: false,
     });
   });
 
@@ -54,11 +53,10 @@ describe('OST mapping', () => {
   it('builds a PATCH body with only the changed fields, upper-casing status and clearing empties', () => {
     expect(toPatchBody({ status: 'validated', value: 5 })).toEqual({ status: 'VALIDATED', valueRating: 5 });
     expect(toPatchBody({ note: '', owner: '' })).toEqual({ notes: null, owner: null });
-    expect(toPatchBody({ title: 'T', conf: 55, priority: 20, archived: true, owner: 'user', note: 'n' })).toEqual({
+    expect(toPatchBody({ title: 'T', conf: 55, priority: 20, owner: 'user', note: 'n' })).toEqual({
       title: 'T',
       confidence: 55,
       priority: 20,
-      archived: true,
       owner: 'user',
       notes: 'n',
     });

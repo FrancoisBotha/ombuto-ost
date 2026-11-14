@@ -4,11 +4,15 @@ import type { PanelTab } from '../domain/derive';
 import type { NodeType } from '../domain/types';
 
 /**
- * localStorage key of the collapsed branches of the working document. There is one working document
- * per browser (see doc/autosave.ts), so one key is enough: it is rewritten when another document is
- * opened. Collapse state is a view preference of this device and is never written to the file.
+ * localStorage key of the collapsed branches of the working document. Collapse state is a view
+ * preference of this device and is never written to the file. Every tab has its own working
+ * document (see doc/autosave-slots.ts), so the document store points each tab at its own key with
+ * `useCollapsedKey`; this one is the key of a tab that has no stored working copy.
  */
 export const COLLAPSED_STORAGE_KEY = 'ombuto-ost.collapsed';
+
+/** Where this tab keeps its collapsed branches. Not view state: it outlives `reset()`. */
+let collapsedKey = COLLAPSED_STORAGE_KEY;
 
 export interface OstUiState {
   selectedId: string | null;
@@ -91,10 +95,26 @@ export const useOstUiStore = defineStore('ostUi', {
     },
 
     // ---- collapse (persisted on this device for the working document) ---------------------------
+    /**
+     * Points this tab at the key of its own working copy. `adoptLegacy`: the working copy came from
+     * the time when the whole browser shared COLLAPSED_STORAGE_KEY, so its collapsed branches move.
+     */
+    useCollapsedKey(key: string, adoptLegacy = false) {
+      collapsedKey = key;
+      if (!adoptLegacy || key === COLLAPSED_STORAGE_KEY) return;
+      try {
+        const legacy = localStorage.getItem(COLLAPSED_STORAGE_KEY);
+        if (legacy === null) return;
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, legacy);
+        localStorage.removeItem(COLLAPSED_STORAGE_KEY);
+      } catch {
+        // storage unavailable: the tree simply starts expanded
+      }
+    },
     restoreCollapsed() {
       let restored: Record<string, boolean> = {};
       try {
-        const raw = localStorage.getItem(COLLAPSED_STORAGE_KEY);
+        const raw = localStorage.getItem(collapsedKey);
         const parsed = raw ? JSON.parse(raw) : {};
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) restored = parsed;
       } catch {
@@ -105,7 +125,7 @@ export const useOstUiStore = defineStore('ostUi', {
     persistCollapsed() {
       try {
         const compact = Object.fromEntries(Object.entries(this.collapsed).filter(([, v]) => v));
-        localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify(compact));
+        localStorage.setItem(collapsedKey, JSON.stringify(compact));
       } catch {
         // storage unavailable — collapse still works for this session
       }

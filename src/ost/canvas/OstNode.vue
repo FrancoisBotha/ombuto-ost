@@ -61,6 +61,7 @@
       :value="editDraft ?? node.title"
       :error="editError"
       @commit="emit('renameCommit', $event)"
+      @draft="emit('renameDraft', $event)"
       @cancel="emit('renameCancel')"
     />
     <div v-else class="ost-node__title" data-cy="ost-node-title" :title="node.title" @dblclick.stop="emit('rename')">{{ node.title }}</div>
@@ -174,6 +175,8 @@ const emit = defineEmits<{
   activate: [];
   rename: [];
   renameCommit: [title: string];
+  /** a valid title typed so far, to store without closing the field */
+  renameDraft: [title: string];
   renameCancel: [];
   delete: [];
   /** one place earlier (-1) or later (+1) among the node's siblings */

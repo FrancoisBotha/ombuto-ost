@@ -213,7 +213,8 @@ describe('document store', () => {
       expect(doc.autosaveFailed).toBe(false);
       doc.setAutosaveStore({ load: async () => null, save: () => Promise.reject(new Error('quota')), clear: async () => undefined });
       await tree.patchNode('product-1', { title: 'Still works' });
-      await expect(doc.flushAutosave()).resolves.toBeUndefined();
+      // The flush settles, and says the browser does not hold the document.
+      await expect(doc.flushAutosave()).resolves.toBe(false);
       expect(tree.byId('product-1')?.title).toBe('Still works');
       expect(doc.autosaveFailed).toBe(true);
     });
@@ -308,7 +309,7 @@ describe('document store', () => {
       io.writeToHandle.mockResolvedValue(undefined);
       expect(await doc.save()).toBe(true);
       expect(io.pickFileToSave).toHaveBeenCalledTimes(1);
-      expect(io.writeToHandle).toHaveBeenCalledWith(handle, expect.stringContaining('"Second edit"'));
+      expect(io.writeToHandle).toHaveBeenCalledWith(handle, expect.stringContaining('"Second edit"'), null);
       expect(doc.dirty).toBe(false);
     });
 
@@ -422,13 +423,41 @@ describe('document store', () => {
       expect(io.downloadFile).not.toHaveBeenCalled();
     });
 
-    it('Save saves first, then carries on', async () => {
+    it('Save to a file saves first, then carries on', async () => {
+      io.supportsFileHandles.mockReturnValue(true);
+      io.pickFileToSave.mockResolvedValue(fakeHandle('work.ost'));
+      await doc.request('example');
+      await doc.resolvePending('save');
+      expect(String(io.pickFileToSave.mock.calls[0][1])).toContain('Unsaved work');
+      expect(doc.pendingAction).toBeNull();
+      expect(tree.byId('product-1')?.title).toBe('Meal-planning app');
+      expect(doc.dirty).toBe(false);
+    });
+
+    it('Save that can only download a copy waits for the user before replacing the tree', async () => {
       await doc.request('example');
       await doc.resolvePending('save');
       expect(io.downloadFile).toHaveBeenCalledTimes(1);
       expect(String(io.downloadFile.mock.calls[0][1])).toContain('Unsaved work');
+      // The app cannot see whether the download arrived: the tree is still the open one.
+      expect(doc.pendingAction).toBe('example');
+      expect(doc.pendingDownloaded).toBe(true);
+      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      // "Carry on".
+      await doc.resolvePending('discard');
+      expect(doc.pendingAction).toBeNull();
+      expect(doc.pendingDownloaded).toBe(false);
       expect(tree.byId('product-1')?.title).toBe('Meal-planning app');
       expect(doc.dirty).toBe(false);
+    });
+
+    it('after such a download, Cancel keeps the tree, now marked as downloaded', async () => {
+      await doc.request('new');
+      await doc.resolvePending('save');
+      await doc.resolvePending('cancel');
+      expect(doc.pendingAction).toBeNull();
+      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      expect(doc.savedBy).toBe('download');
     });
 
     it('Save that does not go through (picker cancelled) keeps the document', async () => {
@@ -449,6 +478,8 @@ describe('document store', () => {
 
     it('tells the user to choose Open file again when the browser will not open a picker any more', async () => {
       io.pickFileToOpen.mockRejectedValue(new DOMException('Must be handling a user gesture', 'SecurityError'));
+      io.supportsFileHandles.mockReturnValue(true);
+      io.pickFileToSave.mockResolvedValue(fakeHandle('work.ost'));
       await doc.request('open');
       await doc.resolvePending('save');
       expect(doc.error).toBe('Choose “Open file” again to pick the file.');

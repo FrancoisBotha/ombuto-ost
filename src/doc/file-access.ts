@@ -23,6 +23,8 @@ export interface OpenedFile {
   fileName: string;
   /** Present only where the browser can write back to the same file. */
   handle: FileSystemFileHandle | null;
+  /** What the file looked like when it was read (see `fileStamp`); null when unknown. */
+  stamp?: string | null;
 }
 
 /** The file is too large to be a tree; nothing was read. */
@@ -30,6 +32,17 @@ export class FileTooLargeError extends Error {
   constructor() {
     super('That file is too large to be an Ombuto OST tree.');
     this.name = 'FileTooLargeError';
+  }
+}
+
+/**
+ * The file was changed by something else (another tab of the app, another program) since this tab
+ * last read or wrote it. Nothing was written: saving would have replaced that other version.
+ */
+export class FileChangedError extends Error {
+  constructor() {
+    super('The file was changed outside this tab.');
+    this.name = 'FileChangedError';
   }
 }
 
@@ -45,6 +58,20 @@ export const supportsFileHandles = (): boolean => pickerWindow() !== null;
 
 /** The user closed a picker without choosing: not an error. */
 const isAbort = (err: unknown): boolean => err instanceof DOMException && err.name === 'AbortError';
+
+const stampOf = (file: File): string => `${file.lastModified}:${file.size}`;
+
+/**
+ * A fingerprint of the file behind a handle as it is on disk now (last-modified time and size), to
+ * notice that it changed behind this tab's back. Null when the file cannot be looked at.
+ */
+export async function fileStamp(handle: FileSystemFileHandle): Promise<string | null> {
+  try {
+    return stampOf(await handle.getFile());
+  } catch {
+    return null;
+  }
+}
 
 async function readFile(file: File): Promise<string> {
   if (file.size > MAX_FILE_BYTES) throw new FileTooLargeError();
@@ -84,15 +111,24 @@ export async function pickFileToOpen(): Promise<OpenedFile | null> {
     throw err;
   }
   const file = await handle.getFile();
-  return { text: await readFile(file), fileName: file.name, handle };
+  return { text: await readFile(file), fileName: file.name, handle, stamp: stampOf(file) };
 }
 
-/** Writes to a file the user opened or chose before. May ask for permission again after a reload. */
-export async function writeToHandle(handle: FileSystemFileHandle, text: string): Promise<void> {
+/**
+ * Writes to a file the user opened or chose before. May ask for permission again after a reload.
+ * With `expectedStamp` (the file as this tab last saw it), a file that has changed since is left
+ * alone and FileChangedError is thrown: two tabs with the same file open must not silently replace
+ * each other's saves.
+ */
+export async function writeToHandle(handle: FileSystemFileHandle, text: string, expectedStamp?: string | null): Promise<void> {
   const access = handle as FileSystemFileHandle & PermissionHandle;
   if (access.queryPermission && (await access.queryPermission({ mode: 'readwrite' })) !== 'granted') {
     const answer = access.requestPermission ? await access.requestPermission({ mode: 'readwrite' }) : 'denied';
     if (answer !== 'granted') throw new DOMException('Permission to write the file was not given.', 'NotAllowedError');
+  }
+  if (expectedStamp) {
+    const current = await fileStamp(handle);
+    if (current !== null && current !== expectedStamp) throw new FileChangedError();
   }
   const writable = await handle.createWritable();
   try {

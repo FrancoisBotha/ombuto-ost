@@ -16,7 +16,8 @@ It is a port of the tree editor from the enterprise app at
   any sub-path: Vite `base: './'` and **hash-mode** router (or no router at all).
 - **One file = one tree.** A `.ost` file is one document holding one tree, which may contain
   several products. No dashboard, no library of trees. New / Open / Save / Save as, plus
-  autosave of the current document in the browser so a refresh or crash loses nothing.
+  autosave of the current document in the browser so a refresh, a closed tab or a crash does not
+  lose the tree (at worst the last second of typing; see "Autosave" below).
 - Kept features: the canvas (six node types: product, outcome, opportunity, solution,
   assumption, evidence), palette, add child, rename, move/reorder by drag and keyboard, delete,
   collapse/expand, search, minimap, legend, product picker, detail panel with fields and notes,
@@ -78,7 +79,7 @@ These are hard requirements, not nice-to-haves:
   - File format: JSON, extension `.ost`, shape
     `{ "format": "ombuto-ost", "version": 1, "name": string, "nodes": [...] }` where a node
     carries: id (number, unique in the file), type, parentId, title, notes, status, confidence,
-    priority, valueRating, owner, sortOrder, archived, createdDate, lastModifiedDate, links
+    priority, valueRating, owner, sortOrder, createdDate, lastModifiedDate, links
     `[{id,name,url}]`, questions `[{id,text,done}]`. Human-readable (pretty-printed) so the
     file is diff-able and easy for an AI agent to read.
   - Strict validation on open: reject files that are not this format with a clear message, and
@@ -91,6 +92,21 @@ These are hard requirements, not nice-to-haves:
     in Firefox / Safari.
   - Autosave: the working document is written (debounced) to IndexedDB and restored on load.
     The file handle is kept in IndexedDB too where the browser allows it.
+    - Text being typed in a field reaches the document 0.3 s after the last key press, and at
+      once before a save, before the document is replaced, and when the page is hidden or closed
+      (`pending-edits.ts`). The autosave follows 0.4 s after a change.
+    - One working copy per tab (`autosave-slots.ts`): the slot id lives in `sessionStorage`, the
+      tab holds a Web Lock named after it (a localStorage heartbeat where there are no Web Locks).
+      On start a tab takes back its own slot, else adopts the most recently changed slot of a
+      closed tab, else starts empty. At most five orphaned slots are kept. Collapsed branches are
+      kept per slot.
+    - A working copy that cannot be read is never deleted or overwritten automatically: the user
+      is told and can save its raw contents to a file.
+  - Limits (enforced on open and at every edit, so the app never saves a file it cannot open):
+    1,000 nodes, 64 levels, 200 links and 200 open questions per node, 20 MB per file. A document
+    replaces the open one only after it has been loaded completely.
+  - A save that can only download a copy (no save picker) is shown as "Downloaded a copy", not
+    "Saved": the app cannot see whether a download arrived.
   - Warn before closing the tab or opening/creating another document when there are changes
     not yet saved to a file.
   - A first-run experience: an empty state with "New tree", "Open file" and "Load example"

@@ -52,7 +52,7 @@ describe('file access', () => {
     it('Open file reads the chosen file and keeps its handle', async () => {
       const { handle } = fakeHandle('meals.ost');
       globals.showOpenFilePicker = vi.fn(async () => [handle]);
-      expect(await pickFileToOpen()).toEqual({ text: '{"x":1}', fileName: 'meals.ost', handle });
+      expect(await pickFileToOpen()).toEqual({ text: '{"x":1}', fileName: 'meals.ost', handle, stamp: expect.stringMatching(/^\d+:7$/) });
       const options = vi.mocked(
         globals.showOpenFilePicker as (o: { multiple: boolean; types: { accept: Record<string, string[]> }[] }) => unknown,
       ).mock.calls[0][0];
