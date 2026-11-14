@@ -1,0 +1,68 @@
+/*
+ * Nocturne tokens: the roles the components use. Do not hard-code these values elsewhere.
+ *
+ * The hex lives once, in theme.css (imported before this file from ost-styles.ts). Everything is
+ * scoped to `.ost-root`, the app's root element.
+ */
+.ost-root {
+  --color-bg: var(--ost-nocturne-ground);
+  --color-surface: var(--ost-nocturne-surface);
+  --color-text: var(--ost-nocturne-text);
+  --color-accent: var(--ost-nocturne-accent);
+  --color-divider: color-mix(in srgb, var(--ost-nocturne-text) 16%, transparent);
+
+  --color-neutral-100: var(--ost-neutral-100);
+  --color-neutral-200: var(--ost-neutral-200);
+  --color-neutral-300: var(--ost-neutral-300);
+  --color-neutral-400: var(--ost-neutral-400);
+  --color-neutral-500: var(--ost-neutral-500);
+  --color-neutral-600: var(--ost-neutral-600);
+  --color-neutral-700: var(--ost-neutral-700);
+  --color-neutral-800: var(--ost-neutral-800);
+  --color-neutral-900: var(--ost-neutral-900);
+
+  --color-accent-100: var(--ost-accent-100);
+  --color-accent-200: var(--ost-accent-200);
+  --color-accent-300: var(--ost-accent-300);
+  --color-accent-400: var(--ost-accent-400);
+  --color-accent-500: var(--ost-accent-500);
+  --color-accent-600: var(--ost-accent-600);
+  --color-accent-700: var(--ost-accent-700);
+  --color-accent-800: var(--ost-accent-800);
+  --color-accent-900: var(--ost-accent-900);
+
+  --font-heading: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-heading-weight: 500;
+  --font-body-weight: 400;
+
+  --space-1: 2.8px;
+  --space-2: 5.6px;
+  --space-3: 8.4px;
+  --space-4: 11.2px;
+  --space-6: 16.8px;
+  --space-8: 22.4px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --shadow-sm: 0 0 0 1px var(--ost-neutral-800);
+  --shadow-md: 0 0 0 1px var(--ost-neutral-700), 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 0 0 1px var(--ost-neutral-500), 0 16px 40px rgba(0, 0, 0, 0.65);
+
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+.ost-root :focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.ost-root ::selection {
+  background: var(--color-accent-800);
+}

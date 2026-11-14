@@ -1,0 +1,56 @@
+{
+  "name": "ombuto-ost",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ombuto OST: a local-first Opportunity Solution Tree editor. No backend, nothing leaves your device.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "vue-tsc --build --force && vite build",
+    "dev": "vite",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "preview": "vite preview",
+    "prettier:check": "prettier --check \"{,src/**/}*.{md,json,yml,js,cjs,mjs,ts,html,vue,css}\"",
+    "prettier:format": "prettier --write \"{,src/**/}*.{md,json,yml,js,cjs,mjs,ts,html,vue,css}\"",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "type-check": "vue-tsc --build --force"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions"
+  ],
+  "dependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@phosphor-icons/vue": "2.2.1",
+    "@vue-flow/core": "1.48.2",
+    "pinia": "3.0.4",
+    "vue": "3.5.30"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.19.15",
+    "@types/sinon": "21.0.0",
+    "@vitejs/plugin-vue": "6.0.4",
+    "@vue/test-utils": "2.4.6",
+    "@vue/tsconfig": "0.9.0",
+    "eslint": "10.0.3",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-prettier": "5.5.5",
+    "eslint-plugin-vue": "10.8.0",
+    "globals": "17.4.0",
+    "happy-dom": "20.8.3",
+    "jiti": "2.6.1",
+    "prettier": "3.8.1",
+    "sinon": "21.0.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.57.0",
+    "vite": "7.3.1",
+    "vitest": "4.0.18",
+    "vue-tsc": "3.3.14"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

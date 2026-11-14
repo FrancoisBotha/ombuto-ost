@@ -1,0 +1,51 @@
+/*
+ * Ombuto OST — the single source of the palette ("Nocturne").
+ *
+ * The four core colours and the two ramps. A ramp step is a pigment, not a role: the roles the
+ * components use (`--color-surface`, `--color-accent-600`, …) are assigned in ost-tokens.css.
+ * No hex value may be written anywhere else.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Nocturne core */
+  --ost-nocturne-ground: #161826;
+  --ost-nocturne-surface: #232532;
+  --ost-nocturne-text: #e9e9ed;
+  --ost-nocturne-accent: #9184d9;
+
+  /* Accent ramp */
+  --ost-accent-100: #f5f4ff;
+  --ost-accent-200: #e7e5fe;
+  --ost-accent-300: #d2cefd;
+  --ost-accent-400: #b5abfc;
+  --ost-accent-500: #968ae0;
+  --ost-accent-600: #796cbf;
+  --ost-accent-700: #5d5294;
+  --ost-accent-800: #423a6a;
+  --ost-accent-900: #2b2741;
+
+  /* Neutral ramp */
+  --ost-neutral-100: #f3f5fe;
+  --ost-neutral-200: #e4e7f5;
+  --ost-neutral-300: #cfd3e5;
+  --ost-neutral-400: #b2b6ca;
+  --ost-neutral-500: #9397ab;
+  --ost-neutral-600: #75798c;
+  --ost-neutral-700: #595d6c;
+  --ost-neutral-800: #3f424d;
+  --ost-neutral-900: #292b31;
+}
+
+/* The page itself: one full-height app, no page scroll (the canvas pans instead). */
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ost-nocturne-ground);
+  overflow: hidden;
+}
