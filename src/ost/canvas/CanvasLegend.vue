@@ -21,7 +21,8 @@ const ITEMS = (['outcome', 'opportunity', 'solution', 'assumption', 'evidence'] 
  * Only the nodes in view are rendered (and so reachable with Tab); the search box's Enter is the
  * keyboard way to every other node, so the hint names it.
  */
-const HINT = 'Drag a node onto another to re-parent · Alt+←/→ reorders · double-click a title to rename · search + Enter jumps to a node';
+const HINT =
+  'Drag a node onto another to re-parent, or sideways past a sibling to reorder · Alt+←/→ reorders · double-click a title to rename · search + Enter jumps to a node';
 </script>
 
 <style scoped>

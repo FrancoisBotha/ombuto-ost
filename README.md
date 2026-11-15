@@ -77,7 +77,10 @@ app's files were fetched, as with any web page. It never sees your tree.
   any time, as a new unsaved tree.
 - **Build the tree**: projects, outcomes, opportunities, solutions, assumptions and evidence. Add a
   child with the `+` on a node, or drag a type from the palette. Double-click a title to rename.
-  Drag a node onto another to move it; Alt+Left / Alt+Right reorders it among its siblings.
+  Drag a node onto another to move it under that node. To change the order, drag a node sideways
+  past a sibling and drop it level with them, where the line shows (Alt+Left / Alt+Right does the
+  same from the keyboard). Projects re-order this way too: top-level projects among themselves,
+  sub-projects among the sub-projects of the same project.
 - **Projects inside projects**: a project holds outcomes and other projects. "+ Project" in the
   toolbar adds a top-level project; the `+` on a project, or Project in the palette, adds a
   sub-project. Drag a project onto another project to nest it, and use "Move to top level" in its
@@ -86,7 +89,8 @@ app's files were fetched, as with any web page. It never sees your tree.
   keep a list of open questions.
 - **Find your way**: search, filter by type, collapse branches, minimap, and the project picker,
   which shows one project (top-level or nested) with everything under it, or all projects.
-- **Save**: File > Save (Ctrl/Cmd+S) saves to a file on your computer. In Chrome and Edge, Save
+- **Save**: File > Save (Ctrl/Cmd+S) saves to a file on your computer, and so does clicking
+  "Unsaved changes" in the top bar. In Chrome and Edge, Save
   writes back to the file you opened and the top bar says "Saved". In Firefox and Safari it
   downloads a copy and the top bar says "Downloaded a copy": a web page cannot see whether a
   download arrived, so check your downloads folder. Ctrl/Cmd+O opens a file.

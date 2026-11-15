@@ -48,6 +48,7 @@ describe('touch targets', () => {
       ['panel/fields/ValueScale.vue', 'ost-value__step ost-hit'],
       ['panel/DetailPanel.vue', 'ost-panel__crumb ost-hit'],
       ['shell/FileMenu.vue', 'ost-file-menu__button ost-hit'],
+      ['shell/TopBar.vue', 'ost-nav__chip ost-nav__save ost-hit'],
     ]) {
       expect(read(file), `${file}: ${cls}`).toContain(`class="${cls}`);
     }

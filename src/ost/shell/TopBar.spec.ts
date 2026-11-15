@@ -14,6 +14,9 @@ vi.mock(import('@/doc/file-access'), async importOriginal => {
 });
 
 enableAutoUnmount(afterEach);
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('TopBar', () => {
   async function bar(record = exampleRecord()) {
@@ -115,7 +118,82 @@ describe('TopBar', () => {
       expect(state.text()).toBe('Unsaved changes');
       expect(state.classes()).toContain('is-dirty');
       expect(state.attributes('role')).toBe('status');
-      expect(state.attributes('title')).toContain('kept in this browser');
+      expect(w.get('[data-cy="ost-save-now"]').attributes('title')).toContain('kept in this browser');
+    });
+
+    describe('the unsaved state is a button that saves', () => {
+      const saveNow = (w: Awaited<ReturnType<typeof bar>>['w']) => w.find('[data-cy="ost-save-now"]');
+
+      it('is a button only while there are unsaved changes, named for what it does', async () => {
+        const { w, tree } = await bar();
+        expect(saveNow(w).exists()).toBe(false);
+        expect(w.find('[data-cy="ost-save-state"] button').exists()).toBe(false);
+
+        await tree.patchNode('project-1', { title: 'Edited' });
+        await flushPromises();
+        const button = saveNow(w);
+        expect(button.element.tagName).toBe('BUTTON');
+        expect(button.attributes('type')).toBe('button');
+        expect(button.attributes('aria-label')).toBe('Unsaved changes — save now');
+        expect(button.attributes('title')).toMatch(/Click to save now \(Ctrl\+S\)/);
+        expect(button.attributes('disabled')).toBeUndefined();
+        expect(button.classes()).toContain('ost-hit');
+        expect(w.html()).not.toMatch(/upload/i);
+      });
+
+      it('a click saves through the document store, once, and the state becomes plain text again', async () => {
+        const { w, tree, doc } = await bar();
+        await tree.patchNode('project-1', { title: 'Edited' });
+        await flushPromises();
+        const save = vi.spyOn(doc, 'save');
+        await saveNow(w).trigger('click');
+        await flushPromises();
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(files.downloadFile)).toHaveBeenCalledTimes(1);
+        expect(doc.dirty).toBe(false);
+        expect(saveNow(w).exists()).toBe(false);
+        const text = w.get('[data-cy="ost-save-text"]');
+        expect(text.element.tagName).toBe('SPAN');
+        expect(text.text()).toBe('Downloaded a copy');
+      });
+
+      it('a second click while the first save is still choosing a file does not start another', async () => {
+        const { w, tree, doc } = await bar();
+        vi.mocked(files.supportsFileHandles).mockReturnValueOnce(true).mockReturnValueOnce(true);
+        let choose!: (handle: FileSystemFileHandle | null) => void;
+        vi.mocked(files.pickFileToSave).mockReturnValue(new Promise(resolve => (choose = resolve)));
+        await tree.patchNode('project-1', { title: 'Edited' });
+        await flushPromises();
+        const save = vi.spyOn(doc, 'save');
+        const button = saveNow(w);
+        await button.trigger('click');
+        await button.trigger('click');
+        await flushPromises();
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(files.pickFileToSave)).toHaveBeenCalledTimes(1);
+        expect(button.attributes('aria-busy')).toBe('true');
+
+        choose(null); // the picker was dismissed: still unsaved, and the button works again
+        await flushPromises();
+        expect(doc.dirty).toBe(true);
+        expect(saveNow(w).attributes('aria-busy')).toBeUndefined();
+        vi.mocked(files.pickFileToSave).mockResolvedValue({ name: 'meals.ost', kind: 'file' } as unknown as FileSystemFileHandle);
+        await saveNow(w).trigger('click');
+        await flushPromises();
+        expect(save).toHaveBeenCalledTimes(2);
+        expect(w.get('[data-cy="ost-save-text"]').text()).toBe('Saved');
+      });
+
+      it('keeps the keyboard focus in the bar when the button it was on goes away', async () => {
+        const { w, tree } = await bar();
+        await tree.patchNode('project-1', { title: 'Edited' });
+        await flushPromises();
+        const button = saveNow(w);
+        (button.element as HTMLElement).focus();
+        await button.trigger('click');
+        await flushPromises();
+        expect(document.activeElement).toBe(w.get('[data-cy="ost-save-state"]').element);
+      });
     });
 
     it('says "Downloaded a copy" after a save that could only download: the app cannot know it arrived', async () => {
@@ -126,7 +204,9 @@ describe('TopBar', () => {
       const state = w.get('[data-cy="ost-save-state"]');
       expect(state.text()).toBe('Downloaded a copy');
       expect(state.classes()).not.toContain('is-dirty');
-      expect(state.attributes('title')).toMatch(/downloads as Example meal-planning app\.ost at \d.*cannot see whether it arrived/);
+      expect(w.get('[data-cy="ost-save-text"]').attributes('title')).toMatch(
+        /downloads as Example meal-planning app\.ost at \d.*cannot see whether it arrived/,
+      );
       expect(vi.mocked(files.downloadFile)).toHaveBeenCalledTimes(1);
     });
 
@@ -139,7 +219,7 @@ describe('TopBar', () => {
       await flushPromises();
       const state = w.get('[data-cy="ost-save-state"]');
       expect(state.text()).toBe('Saved');
-      expect(state.attributes('title')).toMatch(/^Saved to meals\.ost at \d/);
+      expect(w.get('[data-cy="ost-save-text"]').attributes('title')).toMatch(/^Saved to meals\.ost at \d/);
     });
 
     it('a restored document keeps its unsaved state across a reload', async () => {

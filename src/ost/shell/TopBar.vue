@@ -18,9 +18,21 @@
         @keydown.esc.prevent="cancel"
         @blur="commit"
       />
-      <span class="ost-nav__state" :class="{ 'is-dirty': doc.dirty }" role="status" :title="stateTitle" data-cy="ost-save-state">{{
-        stateText
-      }}</span>
+      <span ref="state" class="ost-nav__state" :class="{ 'is-dirty': doc.dirty }" role="status" tabindex="-1" data-cy="ost-save-state">
+        <button
+          v-if="doc.dirty"
+          type="button"
+          class="ost-nav__chip ost-nav__save ost-hit"
+          :aria-label="`${stateText} — save now`"
+          :aria-busy="saving || undefined"
+          :title="stateTitle"
+          data-cy="ost-save-now"
+          @click="saveNow"
+        >
+          {{ stateText }}
+        </button>
+        <span v-else-if="stateText" class="ost-nav__chip" :title="stateTitle" data-cy="ost-save-text">{{ stateText }}</span>
+      </span>
     </template>
 
     <div class="ost-nav__right">
@@ -34,18 +46,24 @@
  * The slim top bar (54px): brand · File menu · the tree's name (editable) · saved / unsaved state ·
  * the privacy indicator on the right.
  *
+ * While there are unsaved changes the state is a button that saves, exactly as File > Save and
+ * Ctrl/Cmd+S do (the document store's `save`). Every other state is plain status text in a box of
+ * the same size, so the bar does not move when the state changes.
+ *
  * The name reaches the document a moment after typing stops, and on Enter / blur; Escape puts back
  * the name the field had when it was focused. It is part of the file, so renaming is a change to
  * save like any other.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 
 import { DOCUMENT_NAME_MAX } from '@/doc/document';
 import { useDocumentStore } from '@/doc/document.store';
 import { useLiveCommit } from '@/doc/pending-edits';
+import { focusIsLost } from '@/ost/canvas/rename-focus';
 import PrivacyIndicator from '@/privacy/PrivacyIndicator.vue';
 
 import FileMenu from './FileMenu.vue';
+import { shortcutLabel } from './shortcuts';
 
 const doc = useDocumentStore();
 
@@ -98,7 +116,9 @@ const stateText = computed(() => {
 });
 
 const stateTitle = computed(() => {
-  if (doc.dirty) return 'These changes are kept in this browser, but not yet saved to a file on your computer.';
+  if (doc.dirty) {
+    return `These changes are kept in this browser, but not yet saved to a file on your computer. Click to save now (${shortcutLabel('S')}).`;
+  }
   if (!doc.fileName) return '';
   const at = doc.lastSavedAt ? new Date(doc.lastSavedAt) : null;
   const time = at && !Number.isNaN(at.getTime()) ? ` at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
@@ -106,6 +126,26 @@ const stateTitle = computed(() => {
     ? `A copy was sent to your browser’s downloads as ${doc.fileName}${time}. The app cannot see whether it arrived: look in your downloads folder.`
     : `Saved to ${doc.fileName}${time}`;
 });
+
+const state = ref<HTMLElement | null>(null);
+/** A save started from the button is still running: a second click must not start another. */
+const saving = ref(false);
+
+async function saveNow(event: MouseEvent) {
+  if (saving.value) return;
+  saving.value = true;
+  const button = event.currentTarget as HTMLElement;
+  // Pressed from the keyboard (a click with no pointer behind it), with the focus on the button.
+  const focused = event.detail === 0 && document.activeElement === button;
+  try {
+    await doc.save();
+  } finally {
+    saving.value = false;
+  }
+  // Saved: the button is gone. Keep the keyboard's place in the bar rather than dropping focus to the page.
+  await nextTick();
+  if (focused && !button.isConnected && focusIsLost()) state.value?.focus({ preventScroll: true });
+}
 </script>
 
 <style scoped>
@@ -149,12 +189,41 @@ const stateTitle = computed(() => {
 }
 
 .ost-nav__state {
+  display: inline-flex;
+  flex: none;
+  border-radius: var(--radius-sm);
   font-size: 11.5px;
   color: var(--color-neutral-500);
   white-space: nowrap;
 }
 .ost-nav__state.is-dirty {
   color: var(--color-accent-300);
+}
+/* The status text and the save button share one box, so swapping them moves nothing. */
+.ost-nav__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  font: inherit;
+  line-height: 1;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.ost-nav__save {
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--color-accent-300) 45%, transparent);
+}
+.ost-nav__save:hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  border-color: var(--color-accent-300);
+}
+.ost-nav__save[aria-busy='true'] {
+  cursor: progress;
 }
 
 .ost-nav__right {

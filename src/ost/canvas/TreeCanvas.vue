@@ -76,6 +76,8 @@
       </div>
     </div>
 
+    <div v-if="reorderMark" class="ost-canvas__insert" :style="reorderMark" aria-hidden="true" data-cy="ost-reorder-mark"></div>
+
     <CanvasLegend />
     <CanvasMinimap
       :nodes="visible"
@@ -106,6 +108,10 @@
  *   the layout (snapToLayout) — a rejected or failed drop animates back. Escape, a window blur or
  *   leaving the canvas mid-drag cancel it (the node snaps back); a release anywhere outside the
  *   canvas is a rejected drop;
+ * - drag a node sideways past a sibling and drop it level with them, anywhere that is not a
+ *   re-parent target: it takes that place among its siblings (drag-reorder.ts). A line marks where
+ *   it will land; no line means the drop changes nothing. The write is the same tree.moveNode with a
+ *   position that Alt+Left / Alt+Right makes;
  * - Alt+Left / Alt+Right on a focused node moves it one place among its siblings (tree.reorderNode);
  * - the node `+` menu and the palette (drag or armed click) create via tree.createNode; the new
  *   node is selected, centred when off-screen and in rename mode;
@@ -131,6 +137,7 @@ import CanvasMinimap from './CanvasMinimap.vue';
 import OstEdge from './OstEdge.vue';
 import OstNode from './OstNode.vue';
 import { childCounts, isDimmed, laidOutNodes, matchesQuery, pinRendered, toFlowEdges, toFlowNodes } from './canvas-model';
+import { type ReorderDrop, type SiblingRow, reorderDrop, siblingRow } from './drag-reorder';
 import { attachTargets, canAttach, clientToFlow, dropTargetAt, insideRect, legalParents } from './edit-rules';
 import { focusIsLost, restoreFocusAfterRename, typingElsewhere } from './rename-focus';
 import { ZOOM_MAX, ZOOM_MIN, type Point, useViewport, wheelZoom } from './useViewport';
@@ -450,7 +457,7 @@ async function reorder(key: string, step: -1 | 1) {
   if (p && !boxInView(p)) view.centreOnBox(p);
 }
 
-// ---- drag to re-parent --------------------------------------------------------------------------
+// ---- drag to re-parent or reorder ---------------------------------------------------------------
 function clientOf(event: MouseEvent | TouchEvent): Point | null {
   if ('touches' in event) {
     const t = event.touches[0] ?? event.changedTouches[0];
@@ -461,6 +468,25 @@ function clientOf(event: MouseEvent | TouchEvent): Point | null {
 
 /** Last pointer position of the node drag (to end Vue Flow's gesture where it is). */
 let dragClient: Point | null = null;
+
+/** The dragged node's siblings as laid out when the drag began (null: nothing to reorder). */
+let dragRow: SiblingRow | null = null;
+/** Where the node would land among its siblings if dropped now; null when the drop is not a reorder. */
+const reorderAt = shallowRef<ReorderDrop | null>(null);
+/** How far the insertion line reaches above and below the row of siblings (flow units). */
+const MARK_OVERHANG = 10;
+
+/** The insertion line, placed in canvas pixels (the canvas is not inside Vue Flow's transformed pane). */
+const reorderMark = computed(() => {
+  const drop = reorderAt.value;
+  if (!drop || !dragRow) return null;
+  const { x, y, zoom: z } = flow.viewport.value;
+  return {
+    left: `${drop.x * z + x}px`,
+    top: `${(dragRow.y - MARK_OVERHANG) * z + y}px`,
+    height: `${(dragRow.h + 2 * MARK_OVERHANG) * z}px`,
+  };
+});
 
 function listenNodeDrag(on: boolean) {
   if (on) {
@@ -476,6 +502,8 @@ function onDragStart({ node, event }: NodeDragEvent) {
   ui.openAddMenu(null);
   dragKey.value = node.id;
   dragClient = clientOf(event);
+  dragRow = siblingRow(node.id, tree.nodes, tree.placed);
+  reorderAt.value = null;
   listenNodeDrag(true);
 }
 
@@ -484,7 +512,12 @@ function onDrag({ event, node }: NodeDragEvent) {
   const client = clientOf(event);
   dragClient = client ?? dragClient;
   const point = client ? flowPoint(client) : null;
-  ui.setDropTarget(point ? dropTargetAt(point, tree.placed, legal.value, node.id, renderedHeight) : null);
+  const target = point ? dropTargetAt(point, tree.placed, legal.value, node.id, renderedHeight) : null;
+  ui.setDropTarget(target);
+  // A drop on a legal parent re-parents; anywhere else inside the canvas it may be a reorder.
+  const home = tree.placed[node.id];
+  reorderAt.value =
+    point && !target && dragRow && home ? reorderDrop(dragRow, node.position.x + home.w / 2, node.position.y - home.y) : null;
 }
 
 function onNodeDragKeydown(event: KeyboardEvent) {
@@ -502,6 +535,8 @@ function onNodeDragKeydown(event: KeyboardEvent) {
 function cancelNodeDrag() {
   if (!dragKey.value) return;
   dragKey.value = null;
+  dragRow = null;
+  reorderAt.value = null;
   ui.setDropTarget(null);
   listenNodeDrag(false);
   const at = dragClient ?? { x: 0, y: 0 };
@@ -511,19 +546,27 @@ function cancelNodeDrag() {
 
 async function onDragStop({ node }: NodeDragEvent) {
   const key = node.id;
-  const target = dragKey.value === key ? ui.dropTargetId : null;
+  const live = dragKey.value === key;
+  const target = live ? ui.dropTargetId : null;
+  const dragged = tree.byId(key);
+  const place = live && !target && dragged ? reorderAt.value : null;
   dragKey.value = null;
   dragClient = null;
+  dragRow = null;
+  reorderAt.value = null;
   listenNodeDrag(false);
   ui.setDropTarget(null);
-  const moving = target ? tree.moveNode(key, target) : null;
+  if (place) view.userMoved();
+  const moving = target ? tree.moveNode(key, target) : place && dragged ? tree.moveNode(key, dragged.parent, place.position) : null;
   // Rejected: straight back. Accepted: the move re-lays out at once; a refused move rolls back.
   await nextTick();
   snapToLayout();
   if (moving) {
-    await moving;
+    const moved = await moving;
     await nextTick();
     snapToLayout();
+    // A reordered node keeps the keyboard focus, as it does after Alt+Left / Alt+Right.
+    if (place && moved && !typingElsewhere(wrap.value)) focusNode(key);
   }
 }
 
@@ -625,6 +668,8 @@ onUnmounted(() => {
   if (ui.addMenuId) ui.openAddMenu(null);
   if (ui.dropTargetId) ui.setDropTarget(null);
   dragKey.value = null;
+  dragRow = null;
+  reorderAt.value = null;
 });
 
 defineExpose({ zoomIn: view.zoomIn, zoomOut: view.zoomOut, fit, centreOn, resolveAttachTarget, createChild, addProject, focusNode });
@@ -658,6 +703,18 @@ defineExpose({ zoomIn: view.zoomIn, zoomOut: view.zoomOut, fit, centreOn, resolv
 .ost-canvas__flow {
   width: 100%;
   height: 100%;
+}
+
+/* Drag to reorder: a solid line in the gap the node will land in (a re-parent target is dashed). */
+.ost-canvas__insert {
+  position: absolute;
+  z-index: 4;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent);
+  pointer-events: none;
 }
 
 /* Re-layout eases nodes to their new place over 180ms (off while a node is being dragged). */
