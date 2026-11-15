@@ -25,6 +25,23 @@ describe('CanvasMinimap (overview map)', () => {
     expect(map.attributes('aria-label')).toBe('Overview map: click or drag to recentre the canvas, scroll to zoom');
   });
 
+  it('draws a node in the colour it was given, and the others by type', () => {
+    const w = mount(CanvasMinimap, {
+      props: {
+        nodes: [node('project-1', null, { color: 'teal' }), node('outcome-1', 'project-1', { color: 'url(x)' as never })],
+        placed,
+        selectedId: null,
+        viewport: { x: 0, y: 0, zoom: 1 },
+        size: { width: 800, height: 600 },
+      },
+    });
+    const project = w.get('[data-cy="ost-minimap-node-project-1"]');
+    expect(project.attributes('data-ost-color')).toBe('teal');
+    expect(project.classes()).toContain('ost-minimap__node--project');
+    expect(w.get('[data-cy="ost-minimap-node-outcome-1"]').attributes('data-ost-color')).toBeUndefined();
+    expect(mountMap().get('[data-cy="ost-minimap-node-project-1"]').attributes('data-ost-color')).toBeUndefined();
+  });
+
   it('draws every laid-out node and the viewport rectangle', () => {
     const w = mountMap();
     expect(w.find('[data-cy="ost-minimap-node-project-1"]').exists()).toBe(true);

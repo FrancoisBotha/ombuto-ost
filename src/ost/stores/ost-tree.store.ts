@@ -33,7 +33,7 @@ export type OstService = Pick<
 export type OstServiceFactory = () => OstService;
 
 type PatchField = keyof NodePatch;
-const PATCH_FIELDS: PatchField[] = ['title', 'note', 'status', 'conf', 'priority', 'value', 'owner'];
+const PATCH_FIELDS: PatchField[] = ['title', 'note', 'status', 'conf', 'priority', 'value', 'owner', 'color'];
 
 /**
  * The open document's tree: flat nodes (pre-order, parent pointers) and every action on them.

@@ -78,6 +78,15 @@ loading the app's own static files.
   projects included), Alt+arrows and "Move to top level" all end there.
 - Colours come from the tokens in `src/ost/styles/` (`theme.css` holds the hex values once;
   `ost-tokens.css` assigns the roles). Do not hard-code colours in components.
+- **A node's colour is a name, not a value.** The palette is `NODE_COLORS` in
+  `src/ost/domain/node-colors.ts`; the file stores the name (`"color": "teal"`, the key absent
+  for the default look), and `isNodeColor` is the only way a value becomes a colour. On open an
+  unknown value is dropped (the one lenient field: a colour is decoration); the document service
+  refuses one at the edit. A colour reaches the page as a `data-ost-color` attribute, never as a
+  style, and reaches an export through `EXPORT_PALETTE.tints`. Adding or renaming a colour means
+  the name and label there, two pigments in `theme.css` and one rule in `ost-tokens.css`;
+  `node-colors.spec.ts` fails until they agree and until every text / fill pair passes WCAG AA.
+  Never remove a name that files may hold without mapping it to another.
 - Every address is relative (`base: './'`, manifest `scope` and `start_url`): the app must work
   from any sub-path. There is no router.
 - "Opportunity Solution Tree" is Teresa Torres's term. This project is not affiliated with

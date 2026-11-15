@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { NODE_COLORS } from '@/ost/domain/node-colors';
+
 import { EXPORT_PALETTE, buildPalette, oklchToHex, parsePigments, priorityHex } from './palette';
 
 const HEX = /^#[0-9a-f]{6}$/;
@@ -16,6 +18,15 @@ describe('export palette', () => {
     expect(colours).toHaveLength(21);
     for (const colour of colours) expect(colour).toMatch(HEX);
     expect(EXPORT_PALETTE.accent[600]).not.toBe(EXPORT_PALETTE.accent[500]);
+  });
+
+  it('resolves every node colour to a literal fill and edge', () => {
+    expect(Object.keys(EXPORT_PALETTE.tints)).toEqual([...NODE_COLORS]);
+    for (const tint of Object.values(EXPORT_PALETTE.tints)) {
+      expect(tint.fill).toMatch(HEX);
+      expect(tint.edge).toMatch(HEX);
+      expect(tint.fill).not.toBe(tint.edge);
+    }
   });
 
   it('reads the pigments of a stylesheet', () => {

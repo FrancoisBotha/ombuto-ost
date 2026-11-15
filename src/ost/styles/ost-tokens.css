@@ -58,6 +58,45 @@
   font-family: var(--font-body);
 }
 
+/*
+ * Node colours. An element that carries `data-ost-color="<name>"` (a node on the canvas, its mark
+ * in the overview map, a swatch in the detail panel) gets the two roles of that colour: `--node-fill`
+ * (the background) and `--node-edge` (the border, and the mark on the dark ground). One rule per
+ * name of NODE_COLORS; an attribute with any other value matches nothing and so changes nothing.
+ */
+.ost-root [data-ost-color='red'] {
+  --node-fill: var(--ost-tint-red-fill);
+  --node-edge: var(--ost-tint-red-edge);
+}
+.ost-root [data-ost-color='orange'] {
+  --node-fill: var(--ost-tint-orange-fill);
+  --node-edge: var(--ost-tint-orange-edge);
+}
+.ost-root [data-ost-color='yellow'] {
+  --node-fill: var(--ost-tint-yellow-fill);
+  --node-edge: var(--ost-tint-yellow-edge);
+}
+.ost-root [data-ost-color='green'] {
+  --node-fill: var(--ost-tint-green-fill);
+  --node-edge: var(--ost-tint-green-edge);
+}
+.ost-root [data-ost-color='teal'] {
+  --node-fill: var(--ost-tint-teal-fill);
+  --node-edge: var(--ost-tint-teal-edge);
+}
+.ost-root [data-ost-color='blue'] {
+  --node-fill: var(--ost-tint-blue-fill);
+  --node-edge: var(--ost-tint-blue-edge);
+}
+.ost-root [data-ost-color='magenta'] {
+  --node-fill: var(--ost-tint-magenta-fill);
+  --node-edge: var(--ost-tint-magenta-edge);
+}
+.ost-root [data-ost-color='grey'] {
+  --node-fill: var(--ost-tint-grey-fill);
+  --node-edge: var(--ost-tint-grey-edge);
+}
+
 .ost-root :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;

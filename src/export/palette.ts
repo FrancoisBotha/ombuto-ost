@@ -7,11 +7,18 @@
  */
 import themeCss from '@/ost/styles/theme.css?raw';
 
+import { NODE_COLORS, type NodeColor } from '@/ost/domain/node-colors';
 import { priorityColor } from '@/ost/domain/rules';
 
 const RAMP_STEPS = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const;
 type RampStep = (typeof RAMP_STEPS)[number];
 export type Ramp = Record<RampStep, string>;
+
+/** The two colours of a node tint: its background and its border. */
+export interface Tint {
+  fill: string;
+  edge: string;
+}
 
 export interface ExportPalette {
   /** The canvas ground. */
@@ -20,6 +27,8 @@ export interface ExportPalette {
   text: string;
   accent: Ramp;
   neutral: Ramp;
+  /** The colours a node can be given, by name (node-colors.ts). */
+  tints: Record<NodeColor, Tint>;
 }
 
 /** Every `--ost-<name>: #rrggbb` declaration of a stylesheet, by name. */
@@ -43,6 +52,9 @@ export function buildPalette(css: string): ExportPalette {
     text: need('nocturne-text'),
     accent: ramp('accent'),
     neutral: ramp('neutral'),
+    tints: Object.fromEntries(
+      NODE_COLORS.map(name => [name, { fill: need(`tint-${name}-fill`), edge: need(`tint-${name}-edge`) }]),
+    ) as Record<NodeColor, Tint>,
   };
 }
 

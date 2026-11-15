@@ -4,6 +4,8 @@
  * - `id` is the node key ("opportunity-12"); `dbId` carries the numeric id stored in the file.
  * - links and questions carry their ids so they can be edited and removed.
  */
+import type { NodeColor } from './node-colors';
+
 export type NodeType = 'project' | 'outcome' | 'opportunity' | 'solution' | 'assumption' | 'evidence';
 
 export const NODE_TYPES: NodeType[] = ['project', 'outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
@@ -40,6 +42,8 @@ export interface OstNode {
   value: number;
   /** assumptions only: free-text owner ('' when unassigned) */
   owner: string;
+  /** Background colour by name; null or absent = the default look of the type. */
+  color?: NodeColor | null;
   sortOrder: number;
   createdDate: string | null;
   lastModifiedDate: string | null;

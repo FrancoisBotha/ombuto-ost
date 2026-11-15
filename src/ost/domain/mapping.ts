@@ -5,9 +5,10 @@
  */
 import type { ApiNodeType, PatchNodeRequest, TreeNodeDTO } from '../ost.model';
 
+import { toNodeColor } from './node-colors';
 import { NODE_TYPES, type NodeType, type OstNode } from './types';
 
-export type NodePatch = Partial<Pick<OstNode, 'title' | 'note' | 'status' | 'conf' | 'priority' | 'value' | 'owner'>>;
+export type NodePatch = Partial<Pick<OstNode, 'title' | 'note' | 'status' | 'conf' | 'priority' | 'value' | 'owner' | 'color'>>;
 
 export const toNodeType = (type: string): NodeType => {
   const t = type.toLowerCase() as NodeType;
@@ -41,6 +42,7 @@ export function fromDto(dto: TreeNodeDTO): OstNode {
     priority: dto.priority ?? 0,
     value: dto.valueRating ?? 0,
     owner: dto.owner ?? '',
+    color: toNodeColor(dto.color),
     sortOrder: dto.sortOrder ?? 0,
     createdDate: dto.createdDate ?? null,
     lastModifiedDate: dto.lastModifiedDate ?? null,
@@ -59,5 +61,6 @@ export function toPatchBody(patch: NodePatch): PatchNodeRequest {
   if (patch.priority !== undefined) body.priority = patch.priority;
   if (patch.value !== undefined) body.valueRating = patch.value;
   if (patch.owner !== undefined) body.owner = patch.owner === '' ? null : patch.owner;
+  if (patch.color !== undefined) body.color = patch.color;
   return body;
 }

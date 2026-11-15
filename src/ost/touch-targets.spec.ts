@@ -30,6 +30,10 @@ describe('touch targets', () => {
     expect(wrapper.get('[data-cy="ost-question-remove-4"]').classes()).toContain('ost-tap');
   });
 
+  it('colour swatches are touch targets', () => {
+    expect(read('panel/fields/ColorField.vue')).toContain('class="ost-colors__swatch ost-tap"');
+  });
+
   it('compact controls get an invisible 44px+ hit area on a coarse pointer (.ost-hit), zoom-aware on the canvas', () => {
     const rule = /@media \(pointer: coarse\) \{([\s\S]*?)\n\}/.exec(baseCss)?.[1] ?? '';
     expect(rule).toContain('.ost-root .ost-hit::before');

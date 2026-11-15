@@ -92,7 +92,7 @@ app's files were fetched, as with any web page. It never sees your tree.
 - **Undo and redo**: Ctrl/Cmd+Z takes back the last change to the tree, and Ctrl/Cmd+Shift+Z or
   Ctrl+Y makes it again; the two arrows in the toolbar do the same and say what they will undo.
   Every change to the tree counts (add, delete with everything under it, rename, move, every
-  field, links, open questions, the tree's name), up to the last 100. What you type in one field
+  field, a node's colour, links, open questions, the tree's name), up to the last 100. What you type in one field
   in one go is one step. While the cursor is in a text field the keys undo your typing in that
   field, as in any text box; they undo the tree once you leave it. Undoing back to the tree as it
   was last saved shows "Saved" again. The history is kept in memory for the tab: it is gone after
@@ -100,6 +100,12 @@ app's files were fetched, as with any web page. It never sees your tree.
   View settings (selection, collapsed branches, zoom) are not part of it.
 - **Details**: select a node to edit its notes and fields, add named links, and (for opportunities)
   keep a list of open questions.
+- **Colour**: give any node a background colour of your own, to mark things up your way (a theme,
+  a team, "discuss on Thursday"). Select the node and pick a swatch under Colour in its details:
+  Red, Orange, Yellow, Green, Teal, Blue, Magenta or Grey, or Default for the normal look of its
+  type. The node keeps its type label and its border style, so its type stays readable. A colour
+  has no built-in meaning. It is saved in the file, drawn in the overview map and in the PNG and
+  SVG exports, and changing it can be undone like any other change.
 - **Find your way**: search, filter by type, collapse branches, minimap, and the project picker,
   which shows one project (top-level or nested) with everything under it, or all projects.
 - **Save**: File > Save (Ctrl/Cmd+S) saves to a file on your computer, and so does clicking
@@ -155,6 +161,14 @@ and for AI agents:
 - `sortOrder` orders siblings of the same type under one parent.
 - `status` applies to opportunities, solutions and assumptions; `priority`, `valueRating` and
   `questions` to opportunities; `confidence` and `owner` to assumptions.
+- `color` is optional, on any node: the name of the node's background colour, one of `red`,
+  `orange`, `yellow`, `green`, `teal`, `blue`, `magenta`, `grey` (for example `"color": "teal"`,
+  written after `owner`). It is a name, not a colour value: the app decides what teal looks like.
+  A node with the default look has no `color` key at all, so a file with no coloured nodes is
+  exactly what it was before colours existed. Any other value (an unknown name, a hex value, a
+  number) is ignored on open and the node gets its default look; it is not a reason to refuse the
+  file. The format is still version 1: a copy of the app from before colours opens such a file,
+  ignores `color`, and drops it when it saves.
 
 Files saved before projects could nest call a project a `product` (`"type": "product"`). They still
 open: a `product` is read as a `project`, and the next save writes `project`. That mapping lives in

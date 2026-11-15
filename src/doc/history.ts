@@ -86,6 +86,7 @@ function sameNode(a: DocNode, b: DocNode, dates = true): boolean {
     a.priority === b.priority &&
     a.valueRating === b.valueRating &&
     a.owner === b.owner &&
+    a.color === b.color &&
     a.sortOrder === b.sortOrder &&
     a.createdDate === b.createdDate &&
     (!dates || a.lastModifiedDate === b.lastModifiedDate) &&

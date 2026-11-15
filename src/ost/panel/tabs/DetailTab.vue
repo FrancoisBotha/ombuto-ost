@@ -2,6 +2,8 @@
   <div v-if="node" class="ost-tab ost-detail" data-cy="ostTab-detail">
     <NodeFields :node-key="node.id" />
 
+    <ColorField :value="node.color" @change="saveColor" />
+
     <NotesField :value="node.note" @change="saveNotes" />
 
     <div class="ost-field">
@@ -39,16 +41,18 @@
 <script setup lang="ts">
 /**
  * Detail tab: the node's typed fields (NodeFields — status, confidence + owner, evidence
- * strength, value + priority), notes, children with navigation and quick-add (useQuickAdd).
+ * strength, value + priority), the node's colour (every type), notes, children with navigation and quick-add (useQuickAdd).
  * Every edit goes through the tree store; failures show inline in the panel.
  */
 import { computed } from 'vue';
 
 import { childrenOf } from '../../domain/derive';
 import { TYPE_BOX } from '../../domain/rules';
+import type { NodeColor } from '../../domain/node-colors';
 import type { NodeType } from '../../domain/types';
 import { useOstTreeStore } from '../../stores/ost-tree.store';
 import { useOstUiStore } from '../../stores/ost-ui.store';
+import ColorField from '../fields/ColorField.vue';
 import NodeFields from '../fields/NodeFields.vue';
 import NotesField from '../fields/NotesField.vue';
 import { type Settled, usePanelAction } from '../panel-action';
@@ -67,6 +71,10 @@ const { addTypes, adding, add: quickAdd } = useQuickAdd(() => props.nodeKey);
 async function saveNotes(note: string, settled: Settled) {
   if (!node.value) return settled(false);
   settled(await run(() => tree.patchNode(props.nodeKey, { note })));
+}
+
+function saveColor(color: NodeColor | null) {
+  void run(() => tree.patchNode(props.nodeKey, { color }));
 }
 
 function go(key: string) {

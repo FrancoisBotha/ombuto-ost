@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { layoutTree } from '@/ost/domain/layout';
 import { node, sampleNodes } from '@/ost/domain/fixtures.test-util';
+import { NODE_COLORS } from '@/ost/domain/node-colors';
 import { TYPE_BOX } from '@/ost/domain/rules';
+import type { NodeType } from '@/ost/domain/types';
 
 import { EXPORT_PALETTE } from './palette';
 import { DEFAULT_PADDING, treeToSvg } from './tree-svg';
@@ -208,4 +210,112 @@ describe('treeToSvg', () => {
     const { svg } = draw(nodes, ['project-1']);
     expect(count(svg, '<path')).toBe(2001);
   });
+});
+describe('treeToSvg: a node with a colour of its own', () => {
+  const P = EXPORT_PALETTE;
+  /** The <g> of the one node whose title is `title`. */
+  const group = (svg: string, title: string) => {
+    const found = svg.match(/<g><rect[^>]*\/>.*?<\/g>/g)?.find(g => g.includes(`>${title}<`));
+    if (!found) throw new Error(`no node "${title}"`);
+    return found;
+  };
+  const frame = (g: string) => /^<g><rect([^>]*)\/>/.exec(g)![1];
+
+  const TYPES: NodeType[] = ['project', 'outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
+  const tree = (extra: (type: NodeType) => Partial<ReturnType<typeof node>>) => [
+    node('project-1', null, { title: 'Tproject', ...extra('project') }),
+    node('outcome-1', 'project-1', { title: 'Toutcome', ...extra('outcome') }),
+    node('opportunity-1', 'outcome-1', { title: 'Topportunity', status: 'exploring', priority: 30, value: 2, ...extra('opportunity') }),
+    node('solution-1', 'opportunity-1', { title: 'Tsolution', status: 'shipped', ...extra('solution') }),
+    node('assumption-1', 'solution-1', { title: 'Tassumption', status: 'refuted', conf: 40, ...extra('assumption') }),
+    node('evidence-1', 'assumption-1', { title: 'Tevidence', ...extra('evidence') }),
+  ];
+
+  it.each([...NODE_COLORS])('%s: every node type is filled and framed with the colour, as literal values', color => {
+    const { svg } = draw(
+      tree(() => ({ color })),
+      ['project-1'],
+    );
+    const { fill, edge } = P.tints[color];
+    for (const type of TYPES) {
+      const f = frame(group(svg, `T${type}`));
+      expect(f).toContain(` fill="${fill}"`);
+      expect(f).toContain(` stroke="${edge}"`);
+      // The border style is the type's.
+      expect(f.includes('stroke-dasharray')).toBe(type === 'assumption');
+    }
+    expect(svg).not.toContain('var(');
+    expect(svg).not.toContain('data-ost-color');
+    assertBalanced(svg);
+  });
+
+  it('keeps the text readable: light text, a stronger type label, chips in the colour’s own terms', () => {
+    const { svg } = draw(
+      tree(() => ({ color: 'teal' })),
+      ['project-1'],
+    );
+    const { fill, edge } = P.tints.teal;
+    for (const type of TYPES) {
+      const g = group(svg, `T${type}`);
+      expect(g).toContain(`fill="${P.text}" fill-opacity="0.9">${type.toUpperCase()}</text>`);
+      expect(g).toMatch(new RegExp(`fill="${P.text}">T${type}</text>`));
+    }
+    // good: inverted chip; in flight: outlined in the edge colour; bad: sunk into the fill.
+    const good = group(svg, 'Tsolution');
+    expect(good).toContain(`fill="${P.text}"/><text`);
+    expect(good).toContain(`fill="${fill}">SHIPPED</text>`);
+    const flight = group(svg, 'Topportunity');
+    expect(flight).toContain(`fill="none" stroke="${edge}"/>`);
+    expect(flight).toContain(`fill="${P.text}">EXPLORING</text>`);
+    const bad = group(svg, 'Tassumption');
+    expect(bad).toContain(`fill="${P.bg}" fill-opacity="0.5"/>`);
+    expect(bad).toContain(`fill="${P.text}">REFUTED</text>`);
+    expect(bad).toContain(`fill="${P.text}" fill-opacity="0.9">40% confidence</text>`);
+    // $ value and the empty priority dots: the text colour, lit and faint.
+    expect(flight).toContain(`<tspan fill="${P.text}">$$</tspan><tspan fill="${P.text}" fill-opacity="0.3">$$$</tspan>`);
+    expect(count(flight, `fill="${P.text}" fill-opacity="0.3"/>`)).toBe(3);
+    // Nothing of the default look is left on a coloured node.
+    for (const stale of [P.accent[800], P.accent[300], P.accent[600], P.neutral[900], P.neutral[800], P.neutral[700]]) {
+      for (const type of TYPES) expect(group(svg, `T${type}`)).not.toContain(stale);
+    }
+  });
+
+  it('colours only the nodes that have one: the rest are drawn as before', () => {
+    const plain = draw(
+      tree(() => ({})),
+      ['project-1'],
+    ).svg;
+    const mixed = draw(
+      tree(type => (type === 'solution' ? { color: 'magenta' } : {})),
+      ['project-1'],
+    ).svg;
+    for (const type of TYPES) {
+      const same = group(mixed, `T${type}`) === group(plain, `T${type}`);
+      expect(same, type).toBe(type !== 'solution');
+    }
+    expect(frame(group(mixed, 'Tsolution'))).toContain(` fill="${P.tints.magenta.fill}"`);
+    for (const tint of Object.values(P.tints)) expect(plain).not.toContain(tint.fill);
+    // null is the default too.
+    expect(
+      draw(
+        tree(() => ({ color: null })),
+        ['project-1'],
+      ).svg,
+    ).toBe(plain);
+  });
+
+  it.each(['red; background:url(https://example.com)', '"/><script>alert(1)</script>', '#ff0000', 7, {}])(
+    'a value that is not a colour of the palette (%j) draws the default look and appears nowhere',
+    hostile => {
+      const plain = draw(
+        tree(() => ({})),
+        ['project-1'],
+      ).svg;
+      const { svg } = draw(
+        tree(() => ({ color: hostile as never })),
+        ['project-1'],
+      );
+      expect(svg).toBe(plain);
+    },
+  );
 });

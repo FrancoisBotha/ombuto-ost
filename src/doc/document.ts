@@ -13,6 +13,7 @@
  * Files from the first published build call a project a "product": see legacy.ts.
  */
 import { TITLE_MIN, titleMax } from '@/ost/canvas/edit-rules';
+import { type NodeColor, isNodeColor } from '@/ost/domain/node-colors';
 import { ALLOWED, STATUS } from '@/ost/domain/rules';
 import { NODE_TYPES, type NodeType } from '@/ost/domain/types';
 
@@ -87,6 +88,11 @@ export interface DocNode {
   links: DocLink[];
   /** opportunities only; empty otherwise. */
   questions: DocQuestion[];
+  /**
+   * The node's background colour, by name (node-colors.ts). Absent = the default look of its type:
+   * the key is never present with another value (not null, not ''), in memory or in the file.
+   */
+  color?: NodeColor;
 }
 
 export interface OstDocument {
@@ -146,6 +152,8 @@ export function serializeDocument(doc: OstDocument): string {
     priority: n.priority,
     valueRating: n.valueRating,
     owner: n.owner,
+    // Written only when set: a file without colours is byte for byte what it was before colours existed.
+    ...(isNodeColor(n.color) ? { color: n.color } : {}),
     sortOrder: n.sortOrder,
     createdDate: n.createdDate,
     lastModifiedDate: n.lastModifiedDate,
@@ -169,6 +177,8 @@ const jsonBytes = (text: string | null): number => (text === null ? 4 : encoder.
 const NODE_OVERHEAD_BYTES = 640;
 const LINK_OVERHEAD_BYTES = 110;
 const QUESTION_OVERHEAD_BYTES = 120;
+/** More than the `"color": ` key, its indentation and its separator can take. */
+const COLOR_OVERHEAD_BYTES = 24;
 /** More than the format line, the name and the brackets around the nodes can take. */
 const ENVELOPE_BYTES = 2048;
 
@@ -180,6 +190,7 @@ export function nodeWeight(node: DocNode): number {
   let bytes = NODE_OVERHEAD_BYTES + jsonBytes(node.title) + jsonBytes(node.notes) + jsonBytes(node.status) + jsonBytes(node.owner);
   for (const l of node.links) bytes += LINK_OVERHEAD_BYTES + jsonBytes(l.name) + jsonBytes(l.url);
   for (const q of node.questions) bytes += QUESTION_OVERHEAD_BYTES + jsonBytes(q.text);
+  if (node.color) bytes += COLOR_OVERHEAD_BYTES + jsonBytes(node.color);
   return bytes;
 }
 
@@ -316,6 +327,11 @@ function readNode(raw: unknown, index: number, linkIds: Set<number>, questionIds
     requireUnset(raw.valueRating, where, 'valueRating', nodeType);
   }
 
+  // A colour is decoration, so a value this app does not know (a colour from a newer palette, a
+  // typo, anything else) is dropped and the node opens with its default look: the tree still opens.
+  // Only a name from the fixed list ever gets past here, so file content never reaches a style.
+  const color = isNodeColor(raw.color) ? raw.color : undefined;
+
   const sortOrder = raw.sortOrder ?? 0;
   if (typeof sortOrder !== 'number' || !Number.isFinite(sortOrder)) fail(where, 'has an invalid sortOrder');
 
@@ -335,6 +351,7 @@ function readNode(raw: unknown, index: number, linkIds: Set<number>, questionIds
     lastModifiedDate: readDate(raw.lastModifiedDate, where, 'lastModifiedDate'),
     links: readLinks(raw.links, where, linkIds),
     questions: readQuestions(raw.questions, where, nodeType, questionIds),
+    ...(color ? { color } : {}),
   };
 }
 

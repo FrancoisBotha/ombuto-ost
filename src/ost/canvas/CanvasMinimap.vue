@@ -15,6 +15,7 @@
       class="ost-minimap__node"
       :class="[`ost-minimap__node--${box.type}`, { 'is-selected': box.id === selectedId }]"
       :style="box.style"
+      :data-ost-color="box.color ?? undefined"
       :data-cy="`ost-minimap-node-${box.id}`"
     ></i>
     <i v-if="viewRect" class="ost-minimap__view" :style="viewRect" data-cy="ost-minimap-view"></i>
@@ -24,6 +25,7 @@
 <script setup lang="ts">
 /**
  * Overview map (bottom-right, 198×134) — every laid-out node plus the current viewport rectangle.
+ * A node with a colour of its own is drawn in that colour's light edge tone.
  * Click or drag in it to recentre the canvas on that point (pannable); the wheel zooms the canvas
  * about its centre (zoomable). Drawn from the derived layout, so it never depends on Vue Flow
  * having measured off-screen nodes (only-render-visible-elements is on).
@@ -31,6 +33,7 @@
 import { computed, onBeforeUnmount } from 'vue';
 
 import type { Placed } from '../domain/layout';
+import { toNodeColor } from '../domain/node-colors';
 import type { OstNode } from '../domain/types';
 
 import { minimapToFlow, minimapTransform } from './canvas-model';
@@ -57,6 +60,7 @@ const boxes = computed(() => {
       return {
         id: n.id,
         type: n.type,
+        color: toNodeColor(n.color),
         style: {
           left: `${t.ox + (p.x - p.w / 2) * t.s}px`,
           top: `${t.oy + p.y * t.s}px`,
@@ -161,6 +165,10 @@ onBeforeUnmount(stop);
 }
 .ost-minimap__node--evidence {
   background: var(--color-neutral-700);
+}
+/* The colour's light tone: the dark fill would vanish on the ground at this size. */
+.ost-minimap__node[data-ost-color] {
+  background: var(--node-edge);
 }
 .ost-minimap__node.is-selected {
   background: var(--color-accent-200);

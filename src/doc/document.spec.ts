@@ -20,6 +20,8 @@ import {
   serializeDocument,
   validateDocument,
 } from './document';
+import { NODE_COLORS } from '@/ost/domain/node-colors';
+
 import { currentNodeKey, currentNodeType } from './legacy';
 import { sampleDocument } from './sample';
 import { legacyFileText, smallDocument } from './small-document.test-util';
@@ -515,5 +517,87 @@ describe('the .ost document format', () => {
       expect(currentNodeKey('opportunity-3')).toBe('opportunity-3');
       expect(currentNodeKey('product')).toBe('product');
     });
+  });
+});
+describe('node colours in the file', () => {
+  const STAMP = new Date('2026-03-01T09:00:00.000Z');
+  /** The keys of a node as the format has always written them, in order. */
+  const KEYS = [
+    'id',
+    'type',
+    'parentId',
+    'title',
+    'notes',
+    'status',
+    'confidence',
+    'priority',
+    'valueRating',
+    'owner',
+    'sortOrder',
+    'createdDate',
+    'lastModifiedDate',
+    'links',
+    'questions',
+  ];
+  const withColor = (color: unknown) => {
+    const file = valid();
+    (file.nodes[1] as Record<string, unknown>).color = color;
+    return file;
+  };
+
+  it('a file without colours is written exactly as before: no "color" key anywhere, the same keys in the same order', () => {
+    const text = serializeDocument(smallDocument(STAMP));
+    expect(text).not.toContain('color');
+    for (const node of JSON.parse(text).nodes) expect(Object.keys(node)).toEqual(KEYS);
+    // Opening and saving it again gives the same bytes.
+    expect(serializeDocument(parseDocument(text))).toBe(text);
+    expect(parseDocument(text).nodes.every(n => !('color' in n))).toBe(true);
+  });
+
+  it('the built-in example and a first-build file round-trip byte for byte too', () => {
+    const example = serializeDocument(sampleDocument(STAMP));
+    expect(serializeDocument(parseDocument(example))).toBe(example);
+    const legacy = parseDocument(legacyFileText(STAMP));
+    expect(serializeDocument(legacy)).not.toContain('color');
+  });
+
+  it.each([...NODE_COLORS])('keeps the known name "%s", written after "owner" on any node type', name => {
+    const doc = validateDocument(withColor(name));
+    expect(doc.nodes[1].color).toBe(name);
+    expect(doc.nodes[0]).not.toHaveProperty('color');
+    const text = serializeDocument(doc);
+    expect(text).toContain(`    "owner": null,\n      "color": "${name}",\n      "sortOrder": 0,`);
+    expect(Object.keys(JSON.parse(text).nodes[1])).toEqual([...KEYS.slice(0, 10), 'color', ...KEYS.slice(10)]);
+    expect(serializeDocument(parseDocument(text))).toBe(text);
+    expect(cloneDocument(doc)).toEqual(doc);
+  });
+
+  it.each([
+    ['a value that tries to carry CSS', 'red; background:url(https://example.com)'],
+    ['a hex value', '#ff0000'],
+    ['a name in another case', 'Teal'],
+    ['a padded name', ' teal '],
+    ['an unknown name', 'chartreuse'],
+    ['an object property name', 'constructor'],
+    ['an empty string', ''],
+    ['a number', 7],
+    ['a boolean', true],
+    ['null', null],
+    ['an object', { name: 'teal' }],
+    ['a list', ['teal']],
+  ])('drops %s: the node opens with its default look and the file still opens', (_what, value) => {
+    const doc = validateDocument(withColor(value));
+    expect(doc.nodes).toHaveLength(valid().nodes.length);
+    expect(doc.nodes[1]).not.toHaveProperty('color');
+    const text = serializeDocument(doc);
+    expect(text).not.toContain('color');
+    expect(text).not.toContain('example.com)');
+    expect(text).toBe(serializeDocument(validateDocument(valid())));
+  });
+
+  it('never writes a colour that is not in the palette, even if one got into memory', () => {
+    const doc = validateDocument(valid());
+    (doc.nodes[0] as { color?: unknown }).color = 'url(https://example.com)';
+    expect(serializeDocument(doc)).not.toContain('color');
   });
 });

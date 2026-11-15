@@ -3,16 +3,18 @@
  *
  * The drawing follows the canvas (OstNode.vue, OstEdge.vue): the same layout, frames, type labels,
  * status badges, confidence, value and priority marks — without the interactive controls and view
- * states (selection, search, collapse). The result is self-contained: literal colours, a system
+ * states (selection, search, collapse). A node with a colour of its own is drawn in it, as on the
+ * canvas. The result is self-contained: literal colours, a system
  * font fallback, no external references, and every piece of user text XML-escaped.
  */
 import { edgeKind } from '@/ost/canvas/canvas-model';
 import { statusTone } from '@/ost/domain/derive';
 import { type Placed, edgePath, layoutTree } from '@/ost/domain/layout';
+import { toNodeColor } from '@/ost/domain/node-colors';
 import { TYPE_BOX } from '@/ost/domain/rules';
 import type { NodeType, OstNode } from '@/ost/domain/types';
 
-import { EXPORT_PALETTE, type ExportPalette, priorityHex } from './palette';
+import { EXPORT_PALETTE, type ExportPalette, type Tint, priorityHex } from './palette';
 import { EXPORT_FONT_FAMILY, type FontSpec, type MeasureText, escapeXml, estimateTextWidth, textWidth, wrapText } from './text';
 
 export interface TreeSvgOptions {
@@ -79,6 +81,18 @@ interface TextOptions {
   opacity?: number;
 }
 
+/** The tint of a node that has a colour of its own; null for the default look of its type. */
+const tintOf = (node: OstNode, p: ExportPalette): Tint | null => {
+  const color = toNodeColor(node.color);
+  return color ? p.tints[color] : null;
+};
+
+/** How strongly the type label and the metric are drawn: a little stronger on a coloured fill. */
+const QUIET = 0.7;
+const QUIET_ON_TINT = 0.9;
+/** Marks that are "off" on a coloured fill (an empty priority dot, an unlit $): the text colour, faint. */
+const MUTE_ON_TINT = 0.3;
+
 /** One line of text; `y` is the baseline. */
 const textEl = (x: number, y: number, font: FontSpec, content: string, options: TextOptions): string =>
   `<text${attrs({
@@ -101,7 +115,13 @@ interface Frame {
   dashed?: boolean;
 }
 
-const frameOf = (type: NodeType, p: ExportPalette): Frame =>
+/** A colour of the user's own replaces the fill and the border colour; the border style stays the type's. */
+const frameOf = (type: NodeType, p: ExportPalette, tint: Tint | null = null): Frame => {
+  const frame = typeFrame(type, p);
+  return tint ? { ...frame, fill: tint.fill, stroke: tint.edge } : frame;
+};
+
+const typeFrame = (type: NodeType, p: ExportPalette): Frame =>
   ({
     project: { fill: p.accent[900], stroke: p.accent[700] },
     outcome: { fill: p.accent[900], stroke: p.accent[600] },
@@ -121,12 +141,26 @@ const edgeStroke = (childType: NodeType, p: ExportPalette): Record<string, strin
     evidence: { stroke: p.neutral[700], 'stroke-width': 1.1, 'stroke-dasharray': '4 4' },
   })[edgeKind(childType)];
 
-const badgeColours = (status: string, p: ExportPalette): { fill: string; stroke: string; text: string } =>
-  ({
-    good: { fill: p.accent[800], stroke: 'none', text: p.accent[200] },
-    flight: { fill: 'none', stroke: p.accent[600], text: p.accent[300] },
-    bad: { fill: p.neutral[900], stroke: 'none', text: p.neutral[300] },
-  })[statusTone(status)];
+interface BadgeColours {
+  fill: string;
+  fillOpacity?: number;
+  stroke: string;
+  text: string;
+}
+
+const badgeColours = (status: string, p: ExportPalette, tint: Tint | null): BadgeColours =>
+  (tint
+    ? {
+        // As on the canvas: inverted, outlined, sunk into the fill.
+        good: { fill: p.text, stroke: 'none', text: tint.fill },
+        flight: { fill: 'none', stroke: tint.edge, text: p.text },
+        bad: { fill: p.bg, fillOpacity: 0.5, stroke: 'none', text: p.text },
+      }
+    : {
+        good: { fill: p.accent[800], stroke: 'none', text: p.accent[200] },
+        flight: { fill: 'none', stroke: p.accent[600], text: p.accent[300] },
+        bad: { fill: p.neutral[900], stroke: 'none', text: p.neutral[300] },
+      })[statusTone(status)];
 
 /** What one node draws, measured before anything is written (its height depends on its text). */
 interface NodePlan {
@@ -174,7 +208,7 @@ function planNode(node: OstNode, placed: Placed, measure: MeasureText): NodePlan
 }
 
 /** Five dots, top = highest band; each fills over its 20-point band and grows 4.5 -> 7px. */
-function priorityDots(plan: NodePlan, p: ExportPalette): string {
+function priorityDots(plan: NodePlan, p: ExportPalette, tint: Tint | null): string {
   const priority = plan.node.priority;
   const dots = [5, 4, 3, 2, 1].map(step => {
     const fill = Math.max(0, Math.min(1, (priority - (step - 1) * 20) / 20));
@@ -193,14 +227,18 @@ function priorityDots(plan: NodePlan, p: ExportPalette): string {
       y += dot.size + gap;
       return dot.fill > 0
         ? `<circle${attrs({ cx, cy, r: dot.size / 2, fill: colour, 'fill-opacity': 0.35 + dot.fill * 0.65 })}/>`
-        : `<circle${attrs({ cx, cy, r: dot.size / 2, fill: p.neutral[800] })}/>`;
+        : tint
+          ? `<circle${attrs({ cx, cy, r: dot.size / 2, fill: p.text, 'fill-opacity': MUTE_ON_TINT })}/>`
+          : `<circle${attrs({ cx, cy, r: dot.size / 2, fill: p.neutral[800] })}/>`;
     })
     .join('');
 }
 
 function drawNode(plan: NodePlan, p: ExportPalette): string {
   const { node, x, y, w, h } = plan;
-  const frame = frameOf(node.type, p);
+  const tint = tintOf(node, p);
+  const frame = frameOf(node.type, p, tint);
+  const quiet = tint ? QUIET_ON_TINT : QUIET;
   const left = x + BORDER + PAD_X;
   const parts: string[] = [
     // Inset by half the stroke so the 1px frame sits on whole pixels.
@@ -223,7 +261,7 @@ function drawNode(plan: NodePlan, p: ExportPalette): string {
   parts.push(
     textEl(left, baseline(blockTop, KICKER_LINE, KICKER.size), KICKER, escapeXml(TYPE_BOX[node.type].label.toUpperCase()), {
       fill: p.text,
-      opacity: 0.7,
+      opacity: quiet,
     }),
   );
   const titleTop = blockTop + KICKER_LINE + TITLE_GAP;
@@ -237,7 +275,7 @@ function drawNode(plan: NodePlan, p: ExportPalette): string {
     const rowMid = y + h - BORDER - PAD_BOTTOM - plan.metaH / 2;
     let cursor = left;
     if (plan.badge) {
-      const colours = badgeColours(node.status, p);
+      const colours = badgeColours(node.status, p, tint);
       parts.push(
         `<rect${attrs({
           x: cursor + 0.5,
@@ -246,6 +284,7 @@ function drawNode(plan: NodePlan, p: ExportPalette): string {
           height: BADGE_H - 1,
           rx: 3.5,
           fill: colours.fill,
+          'fill-opacity': colours.fillOpacity,
           stroke: colours.stroke === 'none' ? undefined : colours.stroke,
         })}/>`,
         textEl(cursor + BORDER + BADGE_PAD_X, baseline(rowMid - BADGE_H / 2 + 3, 12, BADGE.size), BADGE, escapeXml(plan.badge.label), {
@@ -259,18 +298,20 @@ function drawNode(plan: NodePlan, p: ExportPalette): string {
       parts.push(
         textEl(cursor, baseline(metricTop + i * METRIC_LINE, METRIC_LINE, METRIC.size), METRIC, escapeXml(line), {
           fill: p.text,
-          opacity: 0.7,
+          opacity: quiet,
         }),
       );
     });
     if (plan.money !== null) {
-      const on = `<tspan fill="${p.accent[300]}">${'$'.repeat(plan.money)}</tspan>`;
-      const off = `<tspan fill="${p.neutral[700]}">${'$'.repeat(5 - plan.money)}</tspan>`;
+      const on = `<tspan fill="${tint ? p.text : p.accent[300]}">${'$'.repeat(plan.money)}</tspan>`;
+      const off = tint
+        ? `<tspan fill="${p.text}" fill-opacity="${MUTE_ON_TINT}">${'$'.repeat(5 - plan.money)}</tspan>`
+        : `<tspan fill="${p.neutral[700]}">${'$'.repeat(5 - plan.money)}</tspan>`;
       parts.push(textEl(cursor, baseline(rowMid - MONEY_H / 2, MONEY_H, MONEY.size), MONEY, on + off, { fill: p.text }));
     }
   }
 
-  if (node.type === 'opportunity') parts.push(priorityDots(plan, p));
+  if (node.type === 'opportunity') parts.push(priorityDots(plan, p, tint));
   return `<g>${parts.join('')}</g>`;
 }
 

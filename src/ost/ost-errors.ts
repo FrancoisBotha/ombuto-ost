@@ -17,6 +17,7 @@ const MESSAGES = {
   invalidpriority: 'Priority must be between 1 and 100.',
   invalidvaluerating: 'Value must be between 1 and 5.',
   invalidowner: 'Owner names can be at most 100 characters.',
+  invalidcolor: 'That colour is not one of the node colours.',
   invalidposition: 'That position is not valid.',
   cycle: 'A node cannot move under its own descendant.',
   linkmissing: 'That link no longer exists.',

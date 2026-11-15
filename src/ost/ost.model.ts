@@ -30,6 +30,8 @@ export interface TreeNodeDTO {
   priority: number | null;
   valueRating: number | null;
   owner: string | null;
+  /** A colour name (domain/node-colors.ts); null or absent = the default look of the type. */
+  color?: string | null;
   sortOrder: number | null;
   createdDate: string | null;
   lastModifiedDate: string | null;
@@ -45,7 +47,7 @@ export interface CreateNodeRequest {
   title?: string;
 }
 
-/** A change to a node's fields: absent = unchanged; null clears notes / owner. */
+/** A change to a node's fields: absent = unchanged; null clears notes / owner / colour. */
 export interface PatchNodeRequest {
   title?: string;
   notes?: string | null;
@@ -54,6 +56,8 @@ export interface PatchNodeRequest {
   priority?: number;
   valueRating?: number;
   owner?: string | null;
+  /** A colour name; null = back to the default look. */
+  color?: string | null;
 }
 
 export interface MoveNodeRequest {

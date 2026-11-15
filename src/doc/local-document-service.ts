@@ -19,6 +19,7 @@
  */
 import { TITLE_MIN, titleMax } from '@/ost/canvas/edit-rules';
 import { nodeKey, toNodeType } from '@/ost/domain/mapping';
+import { isNodeColor } from '@/ost/domain/node-colors';
 import { ALLOWED, STATUS, isSafeLinkUrl } from '@/ost/domain/rules';
 import type { NodeType } from '@/ost/domain/types';
 import { RuleError } from '@/ost/ost-errors';
@@ -64,6 +65,7 @@ const APPLICABLE: Record<keyof PatchNodeRequest, NodeType[] | 'all'> = {
   priority: ['opportunity'],
   valueRating: ['opportunity'],
   owner: ['assumption'],
+  color: 'all',
 };
 
 const isIntIn = (value: unknown, min: number, max: number): value is number =>
@@ -78,6 +80,7 @@ const FIELD_CHANGE: Record<keyof PatchNodeRequest, { verb: string; text?: boolea
   priority: { verb: 'change priority of' },
   valueRating: { verb: 'change value of' },
   owner: { verb: 'edit owner of', text: true },
+  color: { verb: 'change colour of' },
 };
 
 const bySortOrder = (a: DocNode, b: DocNode) => a.sortOrder - b.sortOrder || a.id - b.id;
@@ -118,6 +121,7 @@ function toDto(node: DocNode, parentType: NodeType | undefined): TreeNodeDTO {
     priority: node.priority,
     valueRating: node.valueRating,
     owner: node.owner,
+    color: node.color ?? null,
     sortOrder: node.sortOrder,
     createdDate: node.createdDate,
     lastModifiedDate: node.lastModifiedDate,
@@ -281,6 +285,7 @@ export default class LocalDocumentService {
     return this.write(() => {
       const node = this.find(this.type(type), id);
       const next: Partial<DocNode> = {};
+      let color: DocNode['color'] | null | undefined;
       for (const field of Object.keys(body) as (keyof PatchNodeRequest)[]) {
         const applies = APPLICABLE[field];
         if (!applies || (applies !== 'all' && !applies.includes(node.type))) throw new RuleError('fieldnotapplicable');
@@ -313,10 +318,22 @@ export default class LocalDocumentService {
         }
         next.owner = body.owner?.trim() || null;
       }
+      if (body.color !== undefined) {
+        // Only a name from the palette is ever stored; null is the default look.
+        if (body.color !== null && !isNodeColor(body.color)) throw new RuleError('invalidcolor');
+        color = body.color;
+      }
       // Every value was checked before anything is applied: a refused patch changes nothing.
-      this.charge(nodeWeight({ ...node, ...next }) - nodeWeight(node));
+      const after: DocNode = { ...node, ...next };
+      if (color) after.color = color;
+      else if (color === null) delete after.color;
+      this.charge(nodeWeight(after) - nodeWeight(node));
       Object.assign(node, next, { lastModifiedDate: new Date().toISOString() });
+      // The default look is the absence of the key, in memory as in the file.
+      if (color) node.color = color;
+      else if (color === null) delete node.color;
       const fields = Object.keys(next) as (keyof PatchNodeRequest)[];
+      if (color !== undefined) fields.push('color');
       const one = fields.length === 1 ? FIELD_CHANGE[fields[0]] : null;
       this.describe(one?.verb ?? 'edit', node, one?.text ? `${fields[0]}:${node.id}` : undefined);
       return this.toDto(node);

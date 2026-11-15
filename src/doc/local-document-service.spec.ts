@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RuleError } from '@/ost/ost-errors';
 import type { TreeNodeDTO } from '@/ost/ost.model';
 
-import { type DocNode, MAX_DEPTH, type OstDocument, emptyDocument, newNodeFields, validateDocument } from './document';
+import { type DocNode, MAX_DEPTH, type OstDocument, emptyDocument, newNodeFields, serializeDocument, validateDocument } from './document';
 import LocalDocumentService from './local-document-service';
 
 /** project 1 > outcome 2 > opportunity 3 > (opportunity 4, solution 5 > assumption 6 > evidence 7, solution 8, evidence 9); project 10. */
@@ -305,6 +305,102 @@ describe('LocalDocumentService', () => {
       expect(await rule(service.patchNode('opportunity', 3, { title: 'Fine title', priority: 500 }))).toBe('invalidpriority');
       expect(nodeOf(3)).toEqual(before);
       expect(changes).not.toHaveBeenCalled();
+    });
+
+    describe('colour', () => {
+      it.each([
+        ['project', 1],
+        ['outcome', 2],
+        ['opportunity', 3],
+        ['solution', 5],
+        ['assumption', 6],
+        ['evidence', 7],
+      ] as const)('sets a named colour on a %s and reports the change', async (type, id) => {
+        const dto = await service.patchNode(type, id, { color: 'teal' });
+        expect(dto.color).toBe('teal');
+        expect(nodeOf(id)!.color).toBe('teal');
+        expect(Date.parse(dto.lastModifiedDate!)).toBeGreaterThan(Date.parse('2026-01-01T00:00:00.000Z'));
+        expect(changes).toHaveBeenCalledTimes(1);
+        expect(service.undoStep?.label).toBe(`change colour of “${type} ${id}”`);
+      });
+
+      it('null is the default look: the key is gone, not null', async () => {
+        await service.patchNode('solution', 5, { color: 'red' });
+        const dto = await service.patchNode('solution', 5, { color: null });
+        expect(dto.color).toBeNull();
+        expect(nodeOf(5)).not.toHaveProperty('color');
+        expect(serializeDocument(service.snapshot()!)).not.toContain('color');
+      });
+
+      it('a node without a colour reads as null', async () => {
+        expect((await service.getTree()).every(n => n.color === null)).toBe(true);
+      });
+
+      it('leaves every other field alone, and travels with other fields in one patch', async () => {
+        const before = nodeOf(3)!;
+        await service.patchNode('opportunity', 3, { color: 'magenta' });
+        expect(nodeOf(3)).toEqual({ ...before, color: 'magenta', lastModifiedDate: nodeOf(3)!.lastModifiedDate });
+        await service.patchNode('opportunity', 3, { color: 'blue', priority: 12 });
+        expect(nodeOf(3)).toMatchObject({ color: 'blue', priority: 12 });
+        expect(service.undoStep?.label).toBe('edit “opportunity 3”');
+      });
+
+      it.each([
+        ['a value that tries to carry CSS', 'red; background:url(https://example.com)'],
+        ['a hex value', '#ff0000'],
+        ['another case', 'RED'],
+        ['an unknown name', 'chartreuse'],
+        ['an empty string', ''],
+        ['a number', 3],
+        ['an object', { name: 'red' }],
+      ])('refuses %s and changes nothing', async (_what, value) => {
+        await service.patchNode('outcome', 2, { color: 'green' });
+        changes.mockClear();
+        const before = nodeOf(2);
+        expect(await rule(service.patchNode('outcome', 2, { color: value as never, title: 'Valid title' }))).toBe('invalidcolor');
+        expect(nodeOf(2)).toEqual(before);
+        expect(changes).not.toHaveBeenCalled();
+      });
+
+      it('is one step to undo and one to redo, and the file follows', async () => {
+        const start = serializeDocument(service.snapshot()!);
+        await service.patchNode('assumption', 6, { color: 'orange' });
+        const orange = serializeDocument(service.snapshot()!);
+        await service.patchNode('assumption', 6, { color: 'grey' });
+        expect(service.undoStep?.label).toBe('change colour of “assumption 6”');
+
+        expect(service.undo()?.label).toBe('change colour of “assumption 6”');
+        expect(nodeOf(6)!.color).toBe('orange');
+        expect(serializeDocument(service.snapshot()!)).toBe(orange);
+        service.undo();
+        expect(nodeOf(6)).not.toHaveProperty('color');
+        expect(serializeDocument(service.snapshot()!)).toBe(start);
+        expect(service.undoStep).toBeNull();
+
+        expect(service.redo()?.label).toBe('change colour of “assumption 6”');
+        expect(nodeOf(6)!.color).toBe('orange');
+        service.redo();
+        expect(nodeOf(6)!.color).toBe('grey');
+        expect(service.redoStep).toBeNull();
+      });
+
+      it('changing the colour marks the document as changed, and undoing it as unchanged again', async () => {
+        const clean = service.mark();
+        await service.patchNode('project', 1, { color: 'yellow' });
+        expect(service.mark()).not.toBe(clean);
+        service.undo();
+        expect(service.mark()).toBe(clean);
+      });
+
+      it('a colour survives a move, and goes with its node when the node is deleted and brought back', async () => {
+        await service.patchNode('solution', 8, { color: 'teal' });
+        await service.moveNode({ nodeType: 'SOLUTION', nodeId: 8, parentType: 'OPPORTUNITY', parentId: 4 });
+        expect(nodeOf(8)).toMatchObject({ parentId: 4, color: 'teal' });
+        await service.deleteNode('solution', 8);
+        expect(nodeOf(8)).toBeUndefined();
+        service.undo();
+        expect(nodeOf(8)).toMatchObject({ color: 'teal' });
+      });
     });
 
     it('refuses an unknown node, or one of another type', async () => {

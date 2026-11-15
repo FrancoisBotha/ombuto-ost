@@ -1,7 +1,7 @@
 /*
  * Ombuto OST — the single source of the palette ("Nocturne").
  *
- * The four core colours and the two ramps. A ramp step is a pigment, not a role: the roles the
+ * The four core colours, the two ramps and the node tints. A ramp step is a pigment, not a role: the roles the
  * components use (`--color-surface`, `--color-accent-600`, …) are assigned in ost-tokens.css.
  * No hex value may be written anywhere else.
  */
@@ -35,6 +35,30 @@
   --ost-neutral-700: #595d6c;
   --ost-neutral-800: #3f424d;
   --ost-neutral-900: #292b31;
+
+  /*
+   * Node tints: the backgrounds a node can be given (domain/node-colors.ts has the names). Each is
+   * a deep `fill`, dark enough for the Nocturne text on top of it (WCAG AA and better: see
+   * node-colors.spec.ts, which measures every pair), and a light `edge` of the same hue for the
+   * node's border. The fills differ in lightness as well as hue, so they stay apart for the common
+   * colour-vision deficiencies.
+   */
+  --ost-tint-red-fill: #813236;
+  --ost-tint-red-edge: #fc9c9c;
+  --ost-tint-orange-fill: #652900;
+  --ost-tint-orange-edge: #e08d5d;
+  --ost-tint-yellow-fill: #655406;
+  --ost-tint-yellow-edge: #d7c06c;
+  --ost-tint-green-fill: #005636;
+  --ost-tint-green-edge: #64c897;
+  --ost-tint-teal-fill: #056662;
+  --ost-tint-teal-edge: #73d8d2;
+  --ost-tint-blue-fill: #053d67;
+  --ost-tint-blue-edge: #60a7e9;
+  --ost-tint-magenta-fill: #58053e;
+  --ost-tint-magenta-edge: #d669ab;
+  --ost-tint-grey-fill: #4c4c54;
+  --ost-tint-grey-edge: #b5b7c0;
 }
 
 /* The page itself: one full-height app, no page scroll (the canvas pans instead). */

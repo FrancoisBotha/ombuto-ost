@@ -1,7 +1,7 @@
 /*
  * The built-in example tree ("Open example" on the empty state and in the File menu): a generic
  * product-discovery tree that shows every node type, sub-projects inside a project, a nested
- * opportunity, most statuses, notes, links and open questions. It is ordinary document data, built
+ * opportunity, most statuses, notes, links, open questions and one node with a colour of its own. It is ordinary document data, built
  * here rather than fetched; it opens as an unsaved document that belongs to no file.
  *
  * It is kept to eight columns of leaves, so the whole tree fits a 1600px-wide window at the
@@ -11,7 +11,7 @@ import type { NodeType } from '@/ost/domain/types';
 
 import { type DocNode, type OstDocument, emptyDocument, newNodeFields } from './document';
 
-type Extra = Partial<Pick<DocNode, 'notes' | 'status' | 'confidence' | 'priority' | 'valueRating' | 'owner'>> & {
+type Extra = Partial<Pick<DocNode, 'notes' | 'status' | 'confidence' | 'priority' | 'valueRating' | 'owner' | 'color'>> & {
   links?: { name: string; url: string }[];
   questions?: { text: string; done?: boolean }[];
 };
@@ -65,7 +65,13 @@ export function sampleDocument(now = new Date()): OstDocument {
   });
   add('evidence', deciding, '7 of 10 interviewees gave up before filling Wednesday');
   add('opportunity', deciding, 'Nobody remembers what was liked last time', { status: 'unexplored', priority: 55, valueRating: 3 });
-  const suggestions = add('solution', deciding, 'Suggest a week from past favourites', { status: 'exploring' });
+  // The one coloured node of the example: enough to show that a node's colour is the user's to give.
+  const suggestions = add('solution', deciding, 'Suggest a week from past favourites', {
+    status: 'exploring',
+    color: 'teal',
+    notes:
+      'This node is teal. A colour means whatever you want it to: here, "on the agenda for the next review". Change it under Colour, above.',
+  });
   const willAccept = add('assumption', suggestions, 'People accept a suggested plan with small edits', {
     status: 'testing',
     confidence: 60,

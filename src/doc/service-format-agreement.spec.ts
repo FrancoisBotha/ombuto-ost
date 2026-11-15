@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { NODE_COLORS } from '@/ost/domain/node-colors';
 import { RuleError } from '@/ost/ost-errors';
 import type { ApiNodeType } from '@/ost/ost.model';
 
@@ -49,6 +50,8 @@ function expectReopens(service: LocalDocumentService) {
   expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(MAX_FILE_BYTES);
   const reopened = parseDocument(text);
   expect(serializeDocument(reopened)).toBe(text);
+  // Only names of the palette are ever written.
+  for (const [, value] of text.matchAll(/"color": (.*),/g)) expect(['"teal"', '"red"', '"grey"']).toContain(value);
 }
 
 const rule = async (call: Promise<unknown>): Promise<string> => {
@@ -96,6 +99,8 @@ const URLS = [
   'http://x',
   `https://example.com/${'p'.repeat(2100)}`,
 ];
+// Known names, the default, and what must never be stored.
+const COLORS = ['teal', 'red', 'grey', null, 'Teal', '#ff0000', 'red; background:url(https://example.com)', '', 7, {}];
 const NUMBERS = [-1, 0, 1, 3, 5, 50, 100, 101, 2.5, Number.NaN, Number.MAX_SAFE_INTEGER];
 
 /** A service holding the nastiest ids a valid file can carry. */
@@ -144,7 +149,10 @@ function randomEdit(service: LocalDocumentService, random: () => number): Promis
         ...(random() < 0.3 ? { priority: pick(NUMBERS) } : {}),
         ...(random() < 0.3 ? { valueRating: pick(NUMBERS) } : {}),
         ...(random() < 0.3 ? { owner: pick([...TEXTS, null]) } : {}),
+        ...(random() < 0.3 ? { color: pick(COLORS) as string | null } : {}),
       }),
+    // A colour on its own: every node type takes one.
+    () => service.patchNode(target.type, target.id, { color: pick(COLORS) as string | null }),
     () => {
       const parent = any();
       return service.moveNode({
@@ -348,10 +356,28 @@ describe('the document service and the file format agree', () => {
       links: [{ id: Number.MAX_SAFE_INTEGER, name: '😀', url: 'https://example.com/\u0001' }],
       questions: [{ id: Number.MAX_SAFE_INTEGER, text: '\ud800', done: false }],
     });
-    for (const n of [extreme, node(1, 'project', null), node(2, 'assumption', 1, { owner: 'Someone' })]) {
+    const coloured = NODE_COLORS.map(color => node(3, 'evidence', 1, { color }));
+    for (const n of [
+      extreme,
+      { ...extreme, color: 'magenta' as const },
+      ...coloured,
+      node(1, 'project', null),
+      node(2, 'assumption', 1, { owner: 'Someone' }),
+    ]) {
       const bytes =
         new TextEncoder().encode(serializeDocument(docOf(n))).length - new TextEncoder().encode(serializeDocument(docOf())).length;
       expect(nodeWeight(n)).toBeGreaterThanOrEqual(bytes);
     }
+  });
+
+  it('the random edits really do colour nodes (the property above is not vacuous)', async () => {
+    const random = mulberry32(21);
+    const service = hostileStart();
+    let coloured = 0;
+    for (let step = 0; step < 300; step++) {
+      await randomEdit(service, random).catch(err => expect(err).toBeInstanceOf(RuleError));
+      coloured = Math.max(coloured, service.snapshot()!.nodes.filter(n => n.color).length);
+    }
+    expect(coloured).toBeGreaterThan(0);
   });
 });

@@ -18,6 +18,7 @@
     :data-cy="`ost-node-${node.id}`"
     :data-node-key="node.id"
     :data-node-type="node.type"
+    :data-ost-color="color ?? undefined"
     :data-drop-target="legalTarget ? 'true' : undefined"
     :data-drop-hover="dropTarget ? 'true' : undefined"
     tabindex="0"
@@ -109,7 +110,9 @@
 <script setup lang="ts">
 /**
  * One tree node on the canvas (Vue Flow custom node body). Type is carried by frame + fill weight,
- * never hue. Purely presentational: the canvas computes every flag from the stores and handles the
+ * never hue: hue is the user's to give. A node with a colour (node-colors.ts) carries
+ * `data-ost-color`, which swaps its fill and border colour for that colour's tokens; the type label,
+ * the border style (solid / dashed), the size and every state outline stay as they are. Purely presentational: the canvas computes every flag from the stores and handles the
  * emitted events.
  *
  * One metric per type: assumptions show confidence, opportunities show value. A solution's evidence
@@ -126,6 +129,7 @@ import { computed, ref } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 
 import { statusTone } from '../domain/derive';
+import { toNodeColor } from '../domain/node-colors';
 import { TYPE_BOX, priorityColor, priorityLabel } from '../domain/rules';
 import type { NodeType, OstNode } from '../domain/types';
 
@@ -196,6 +200,8 @@ const addButton = ref<HTMLButtonElement | null>(null);
 
 const box = computed(() => TYPE_BOX[props.node.type]);
 const isOpportunity = computed(() => props.node.type === 'opportunity');
+/** Only a name from the palette ever reaches the attribute. */
+const color = computed(() => toNodeColor(props.node.color));
 /** A sub-project: its + menu also offers the way back to the top level. */
 const canMoveTop = computed(() => props.node.type === 'project' && props.node.parent !== null);
 const tone = computed(() => statusTone(props.node.status));
@@ -235,7 +241,7 @@ const priorityDots = computed(() =>
     const p = props.node.priority;
     const fill = Math.max(0, Math.min(1, (p - (step - 1) * 20) / 20));
     const size = (4.5 + fill * 2.5).toFixed(1);
-    const color = fill > 0 ? priorityColor(p) : 'var(--color-neutral-800)';
+    const color = fill > 0 ? priorityColor(p) : 'var(--node-mute)';
     return {
       step,
       fill,
@@ -266,6 +272,8 @@ const priorityDots = computed(() =>
   user-select: none;
   cursor: pointer;
   transition: opacity 0.18s ease;
+  /* Marks that are "off" (an empty priority dot, an unlit $): quiet on the default fills. */
+  --node-mute: var(--color-neutral-800);
 }
 
 /* ---- frames: type is carried by frame, never hue ------------------------------------------- */
@@ -297,6 +305,43 @@ const priorityDots = computed(() =>
   font-style: italic;
 }
 
+/*
+ * ---- a colour of the user's own -----------------------------------------------------------------
+ * Replaces the fill and the border COLOUR only. The frame stays the type's: the border style
+ * (dashed for an assumption), the size, the label, evidence's italics. The fills are dark, so the
+ * Nocturne text keeps its place; what leaned on the accent or on a default fill is restated in
+ * terms of the text colour and the node's own two colours (the contrast of every pair is measured
+ * in node-colors.spec.ts). These rules sit BEFORE the states, which keep their outlines and halo.
+ */
+.ost-node[data-ost-color] {
+  background: var(--node-fill);
+  border-color: var(--node-edge);
+  --node-mute: color-mix(in srgb, var(--color-text) 30%, transparent);
+}
+.ost-node[data-ost-color] .ost-node__kicker,
+.ost-node[data-ost-color] .ost-node__metric {
+  opacity: 0.9;
+}
+/* good: the chip is inverted; in flight: outlined; bad: sunk into the fill. */
+.ost-node[data-ost-color] .ost-node__badge--good {
+  background: var(--color-text);
+  color: var(--node-fill);
+}
+.ost-node[data-ost-color] .ost-node__badge--flight {
+  border-color: var(--node-edge);
+  color: var(--color-text);
+}
+.ost-node[data-ost-color] .ost-node__badge--bad {
+  background: color-mix(in srgb, var(--color-bg) 50%, transparent);
+  color: var(--color-text);
+}
+.ost-node[data-ost-color] .ost-node__money-on {
+  color: var(--color-text);
+}
+.ost-node[data-ost-color] .ost-node__money-off {
+  color: var(--node-mute);
+}
+
 /* ---- states ---------------------------------------------------------------------------------- */
 /* The browser's own focus outline is replaced by the ring below. This rule comes BEFORE the state
    rules on purpose: a focused node keeps its selected / target / drop outline and match halo. */
@@ -322,7 +367,11 @@ const priorityDots = computed(() =>
     0 0 0 6px color-mix(in srgb, var(--color-accent) 22%, transparent),
     0 0 22px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
-/* The legal target under the pointer. */
+/* A coloured node keeps its colour when selected: the outline and the glow say "selected". */
+.ost-node[data-ost-color].is-selected {
+  background: var(--node-fill);
+}
+/* The legal target under the pointer (the accent fill wins over a colour while it lasts). */
 .ost-node.is-drop {
   outline: 2px dashed var(--color-accent);
   outline-offset: 4px;

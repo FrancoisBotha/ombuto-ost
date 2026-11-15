@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { mount } from '@vue/test-utils';
 
 import { node } from '../domain/fixtures.test-util';
+import { NODE_COLORS } from '../domain/node-colors';
 import { priorityColor } from '../domain/rules';
 import type { NodeType, OstNode } from '../domain/types';
 
@@ -152,7 +155,7 @@ describe('OstNode', () => {
       for (const d of list) expect(bg(d.element)).toBe(colour);
       const low = dots(10);
       expect(bg(low[4].element)).toBe(priorityColor(10));
-      expect(bg(low[0].element)).toBe('var(--color-neutral-800)');
+      expect(bg(low[0].element)).toBe('var(--node-mute)');
     });
 
     it('a partly filled dot is smaller and fainter than a full one', () => {
@@ -343,5 +346,90 @@ describe('OstNode', () => {
       const wrapper = mountNode(node('assumption-1', 'solution-1'), { addMenuOpen: true });
       expect(wrapper.find('[data-cy="ost-add-menu"]').exists()).toBe(false);
     });
+  });
+});
+describe('OstNode with a colour of its own', () => {
+  const TYPES: NodeType[] = ['project', 'outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
+  const cases = TYPES.flatMap(type => NODE_COLORS.map(color => [type, color] as const));
+
+  it.each(cases)('%s in %s: the colour is an attribute, the type frame and label stay', (type, color) => {
+    const wrapper = mountNode(
+      node(`${type}-1`, type === 'project' ? null : 'x-1', { color, status: type === 'solution' ? 'shipped' : '' }),
+    );
+    const root = wrapper.get('.ost-node');
+    expect(root.attributes('data-ost-color')).toBe(color);
+    expect(root.classes()).toContain(`ost-node--${type}`);
+    expect(root.attributes('data-node-type')).toBe(type);
+    expect(wrapper.get('.ost-node__kicker').text().toLowerCase()).toBe(type);
+    // Size only: no colour value is ever written into the node's style.
+    expect(root.attributes('style')).toMatch(/^width: \d+px; min-height: \d+px;$/);
+  });
+
+  it('a node without a colour carries no attribute', () => {
+    for (const color of [null, undefined]) {
+      expect(
+        mountNode(node('solution-1', 'x-1', { color }))
+          .get('.ost-node')
+          .attributes('data-ost-color'),
+      ).toBeUndefined();
+    }
+  });
+
+  it.each(['red; background:url(https://example.com)', '#ff0000', 'RED', '', 7, { a: 1 }])(
+    'a value that is not a colour of the palette (%j) never reaches the element',
+    hostile => {
+      const wrapper = mountNode(node('solution-1', 'x-1', { color: hostile as never }));
+      expect(wrapper.get('.ost-node').attributes('data-ost-color')).toBeUndefined();
+      expect(wrapper.html()).not.toContain('example.com');
+      expect(wrapper.html()).not.toContain('background');
+    },
+  );
+
+  it('keeps every state class on a coloured node', () => {
+    const wrapper = mountNode(node('opportunity-1', 'x-1', { color: 'teal', status: 'exploring' }), {
+      selected: true,
+      match: true,
+      dimmed: true,
+      legalTarget: true,
+      dropTarget: true,
+    });
+    const root = wrapper.get('.ost-node');
+    expect(root.classes()).toEqual(expect.arrayContaining(['is-selected', 'is-match', 'is-dimmed', 'is-target', 'is-drop']));
+    expect(root.attributes('data-ost-color')).toBe('teal');
+    expect(root.attributes('aria-label')).toBe('Opportunity: Title opportunity-1, exploring, selected');
+  });
+
+  it('follows a change of colour', async () => {
+    const wrapper = mountNode(node('evidence-1', 'x-1', { color: 'red' }));
+    await wrapper.setProps({ node: node('evidence-1', 'x-1', { color: 'blue' }) });
+    expect(wrapper.get('.ost-node').attributes('data-ost-color')).toBe('blue');
+    await wrapper.setProps({ node: node('evidence-1', 'x-1') });
+    expect(wrapper.get('.ost-node').attributes('data-ost-color')).toBeUndefined();
+  });
+
+  it('the colour rules come before the state rules, so every state still shows on a colour', () => {
+    const css = readFileSync('src/ost/canvas/OstNode.vue', 'utf8');
+    const at = (text: string) => {
+      const i = css.indexOf(text);
+      expect(i, text).toBeGreaterThan(-1);
+      return i;
+    };
+    const colour = at('.ost-node[data-ost-color] {');
+    expect(colour).toBeGreaterThan(at('.ost-node--evidence {'));
+    for (const state of [
+      '.ost-node.is-match {',
+      '.ost-node.is-target {',
+      '.ost-node.is-selected {',
+      '.ost-node.is-drop {',
+      '.ost-node.is-dimmed {',
+    ]) {
+      expect(at(state), state).toBeGreaterThan(colour);
+    }
+    // Selected keeps the colour; the drop target under the pointer takes the accent fill, last.
+    expect(at('.ost-node.is-drop {')).toBeGreaterThan(at('.ost-node[data-ost-color].is-selected {'));
+    // The border style is the type's: the colour rule sets a colour, never a style or the shorthand.
+    const rule = css.slice(colour, css.indexOf('}', colour));
+    expect(rule).toContain('border-color: var(--node-edge);');
+    expect(rule).not.toMatch(/border(-style)?:/);
   });
 });

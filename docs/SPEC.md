@@ -23,6 +23,22 @@ It is a port of the tree editor from the enterprise app at
   collapse/expand, search, minimap, legend, project picker, detail panel with fields and notes,
   **Links** tab (plain named URLs), **Open questions** tab, and **Export** to PNG, SVG and
   Markdown.
+- Added: **a background colour per node**, from a fixed palette of eight named colours plus
+  Default (the look of the node's type). No free colour picker, no user-defined colours, no
+  meanings, no filter by colour, no coloured edges, no bulk recolour.
+  - Set in the detail panel (Detail tab, "Colour": a radio group of swatches, Default first),
+    for every node type, one node at a time. There is no route from the canvas: the `+` menu
+    exists only on nodes that can have children, so a colour row there would be missing on
+    evidence.
+  - A colour replaces the fill and the border colour. The type label, the border style (dashed
+    for an assumption), the size and every state (selected, focused, search match and dimming,
+    drop target) stay. The names are in `ost/domain/node-colors.ts`; the values are tokens
+    (`--ost-tint-<name>-fill` / `-edge` in `theme.css`, the roles `--node-fill` / `--node-edge`
+    in `ost-tokens.css`), applied through a `data-ost-color` attribute, never a style. The
+    fills are dark, so the Nocturne text stays; `node-colors.spec.ts` measures the contrast of
+    every text / fill pair (WCAG AA).
+  - The overview map and the PNG / SVG exports draw the colour; the legend still describes
+    types; the Markdown outline leaves colour out.
 - Added: **undo / redo** of every change to the tree (document-level history of whole states, at
   most 100 steps, in memory for the tab only, never in the file; `src/doc/history.ts`).
 - Removed features: teams, members, roles, sign-in, live collaboration/realtime, chat and
@@ -97,6 +113,13 @@ blob:` for export; `worker-src 'self'`).
     priority, valueRating, owner, sortOrder, createdDate, lastModifiedDate, links
     `[{id,name,url}]`, questions `[{id,text,done}]`. Human-readable (pretty-printed) so the
     file is diff-able and easy for an AI agent to read.
+  - A node may also carry `color`: the NAME of its background colour (`"color": "teal"`),
+    never a value, so the palette can be tuned without touching files. The key is absent for
+    the default look, so files without colours are byte for byte unchanged. On open only a
+    known name is kept; anything else is dropped to the default look rather than refusing the
+    file (a colour is decoration, and a newer palette must not make a file unreadable). At the
+    edit the document service refuses an unknown name. Still version 1: an older copy of the
+    app ignores the key.
   - The format stays on version 1. Files and browser working copies written by the first
     published build say `"type": "product"`: on open and on autosave restore that is read as
     `project` (`src/doc/legacy.ts`, the one place for it), and nothing is written with the old
@@ -138,7 +161,8 @@ blob:` for export; `worker-src 'self'`).
   Keyboard: Ctrl/Cmd+S saves, Ctrl/Cmd+O opens.
 - **Export** (`src/export/`): no new runtime dependency.
   - SVG: generated directly from the laid-out tree (`domain/layout.ts` gives positions and
-    `edgePath`), with colours matching the canvas and text wrapped/truncated to fit node boxes.
+    `edgePath`), with colours matching the canvas (a node's own colour included, resolved to
+    literal values from `theme.css`) and text wrapped/truncated to fit node boxes.
     Exports the whole tree for the current project view (all projects, or the focused project's
     subtree), ignoring collapse state and viewport. Nested projects are drawn like any other
     parent and child.
