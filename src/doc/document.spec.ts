@@ -202,7 +202,7 @@ describe('the .ost document format', () => {
         '{"format":"other","version":1,"name":"x","nodes":[]}',
         '{"nodes":[]}',
       ]) {
-        expect(() => parseDocument(text), text).toThrow('This file is not a Pebble OST tree.');
+        expect(() => parseDocument(text), text).toThrow('This file is not an Ombuto OST tree.');
       }
     });
 

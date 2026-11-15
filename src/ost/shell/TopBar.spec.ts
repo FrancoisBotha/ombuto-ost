@@ -32,7 +32,7 @@ describe('TopBar', () => {
     const ctx = setupShellStores();
     await ctx.doc.init();
     const w = await mountShell(TopBar, ctx.pinia);
-    expect(w.get('.ost-nav__brand').text()).toBe('Pebble / OST');
+    expect(w.get('.ost-nav__brand').text()).toBe('Ombuto / OST');
     expect(w.find('[data-cy="ost-file-menu"]').exists()).toBe(true);
     expect(w.find('[data-cy="ost-privacy-indicator"]').exists()).toBe(true);
     expect(w.find('[data-cy="ost-doc-name"]').exists()).toBe(false);

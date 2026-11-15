@@ -406,12 +406,12 @@ describe('document store', () => {
       expect(doc.error).toBeNull();
     });
 
-    it('refuses a file that is not a Pebble OST tree, with a clear message, and keeps the open document', async () => {
+    it('refuses a file that is not an Ombuto OST tree, with a clear message, and keeps the open document', async () => {
       await doc.request('example');
       await tree.patchNode('project-1', { title: 'Mine' });
       io.pickFileToOpen.mockResolvedValue({ text: '{"some":"json"}', fileName: 'other.json', handle: null });
       expect(await doc.openFile()).toBe(false);
-      expect(doc.error).toBe('This file is not a Pebble OST tree.');
+      expect(doc.error).toBe('This file is not an Ombuto OST tree.');
       expect(tree.byId('project-1')?.title).toBe('Mine');
       expect(doc.dirty).toBe(true);
       expect(doc.fileName).toBeNull();
@@ -429,7 +429,7 @@ describe('document store', () => {
     it('reports a file that is too large, and any other read failure, in plain words', async () => {
       io.pickFileToOpen.mockRejectedValue(new files.FileTooLargeError());
       await doc.openFile();
-      expect(doc.error).toBe('That file is too large to be a Pebble OST tree.');
+      expect(doc.error).toBe('That file is too large to be an Ombuto OST tree.');
       io.pickFileToOpen.mockRejectedValue(new Error('EIO: something low-level'));
       await doc.openFile();
       expect(doc.error).toBe('That file could not be opened.');

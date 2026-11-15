@@ -11,8 +11,8 @@ import type { ManifestOptions } from 'vite-plugin-pwa';
 export const APP_COLOUR = '#161826';
 
 export const manifest: Partial<ManifestOptions> = {
-  name: 'Pebble OST',
-  short_name: 'Pebble OST',
+  name: 'Ombuto OST',
+  short_name: 'Ombuto OST',
   description: 'A local-first Opportunity Solution Tree editor. Your tree stays on this device.',
   lang: 'en',
   id: './',

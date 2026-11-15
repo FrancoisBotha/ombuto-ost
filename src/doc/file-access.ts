@@ -30,7 +30,7 @@ export interface OpenedFile {
 /** The file is too large to be a tree; nothing was read. */
 export class FileTooLargeError extends Error {
   constructor() {
-    super('That file is too large to be a Pebble OST tree.');
+    super('That file is too large to be an Ombuto OST tree.');
     this.name = 'FileTooLargeError';
   }
 }
@@ -46,7 +46,7 @@ export class FileChangedError extends Error {
   }
 }
 
-const PICKER_TYPES = [{ description: 'Pebble OST tree', accept: { [FILE_MIME]: [FILE_EXTENSION] } }];
+const PICKER_TYPES = [{ description: 'Ombuto OST tree', accept: { [FILE_MIME]: [FILE_EXTENSION] } }];
 
 const pickerWindow = (): PickerWindow | null => {
   const w = globalThis as unknown as Partial<PickerWindow>;

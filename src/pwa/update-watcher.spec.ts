@@ -226,7 +226,7 @@ describe('UpdatePrompt', () => {
   it('with no tree open it only says that a new version is ready', async () => {
     const { find, announce } = await mounted(null);
     await announce();
-    expect(find().get('[data-cy="ost-update-text"]').text()).toBe('A new version of Pebble OST is ready.');
+    expect(find().get('[data-cy="ost-update-text"]').text()).toBe('A new version of Ombuto OST is ready.');
   });
 
   it('with autosave off it asks for a save to a file before the reload', async () => {

@@ -47,7 +47,7 @@ export interface UnreadableCopy {
   text: string;
 }
 
-const RECOVERED_FILE_NAME = 'Pebble OST recovered working copy.json';
+const RECOVERED_FILE_NAME = 'Ombuto OST recovered working copy.json';
 
 /**
  * The document on screen: its name, whether it has changes not yet saved to a file, the file it

@@ -106,8 +106,8 @@ describe('the page keeps the privacy promise (checkIndexHtml)', () => {
 describe('web app manifest', () => {
   const themeCss = readFileSync('src/ost/styles/theme.css', 'utf8');
 
-  it('is named Pebble OST and takes its colour from the app palette', () => {
-    expect(manifest.name).toBe('Pebble OST');
+  it('is named Ombuto OST and takes its colour from the app palette', () => {
+    expect(manifest.name).toBe('Ombuto OST');
     expect(themeCss).toContain(`--ost-nocturne-ground: ${APP_COLOUR};`);
     expect(manifest.background_color).toBe(APP_COLOUR);
     expect(manifest.theme_color).toBe(APP_COLOUR);

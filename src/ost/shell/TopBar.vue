@@ -1,6 +1,6 @@
 <template>
   <header class="ost-nav" data-cy="ost-top-bar">
-    <div class="ost-nav__brand">Pebble<span class="ost-nav__slash"> / </span>OST</div>
+    <div class="ost-nav__brand">Ombuto<span class="ost-nav__slash"> / </span>OST</div>
     <FileMenu />
 
     <template v-if="doc.hasDocument">
