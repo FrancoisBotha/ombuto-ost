@@ -65,6 +65,25 @@ describe('AddChildMenu', () => {
     expect(document.activeElement).toBe(first);
   });
 
+  it('offers "Move to top level" on a sub-project only, below the child types, and asks for the move', async () => {
+    const plain = await open('project');
+    expect(plain.find('[data-cy="ost-add-menu-move-top"]').exists()).toBe(false);
+    plain.unmount();
+
+    wrapper = mount(AddChildMenu, { props: { parentType: 'project', parentTitle: 'Sub', canMoveTop: true }, attachTo: document.body });
+    await flushPromises();
+    expect(items(wrapper)).toEqual(['ost-add-menu-outcome', 'ost-add-menu-project', 'ost-add-menu-move-top']);
+    expect(wrapper.find('[role="separator"]').exists()).toBe(true);
+    const item = wrapper.get('[data-cy="ost-add-menu-move-top"]');
+    expect(item.text()).toBe('Move to top level');
+    await item.trigger('click');
+    expect(wrapper.emitted('moveTop')).toHaveLength(1);
+    expect(wrapper.emitted('choose')).toBeUndefined();
+    // It is part of the menu's keyboard loop: End lands on it.
+    await wrapper.get('[role="menu"]').trigger('keydown', { key: 'End' });
+    expect(document.activeElement).toBe(item.element);
+  });
+
   it('Escape closes and asks for focus back on the +; Tab closes without it', async () => {
     const w = await open('outcome');
     await w.get('[role="menu"]').trigger('keydown', { key: 'Escape' });

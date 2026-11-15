@@ -36,6 +36,11 @@ export interface OstUiState {
   confirmId: string | null;
   /** Asks the canvas to centre a node (panel breadcrumb / child list); seq makes repeats observable. */
   centreRequest: { key: string; seq: number } | null;
+  /**
+   * What an undo or redo just did, in words. Always announced to screen readers; `show` also puts
+   * it on screen for a moment (the change was somewhere the canvas does not show). seq makes repeats observable.
+   */
+  notice: { text: string; show: boolean; seq: number } | null;
 }
 
 const initialState = (): OstUiState => ({
@@ -54,6 +59,7 @@ const initialState = (): OstUiState => ({
   editingId: null,
   confirmId: null,
   centreRequest: null,
+  notice: null,
 });
 
 /** View state of the OST screens. Never holds tree data (see ost-tree.store.ts). */
@@ -74,6 +80,12 @@ export const useOstUiStore = defineStore('ostUi', {
     },
     requestCentre(key: string) {
       this.centreRequest = { key, seq: (this.centreRequest?.seq ?? 0) + 1 };
+    },
+    notify(text: string, show: boolean) {
+      this.notice = { text, show, seq: (this.notice?.seq ?? 0) + 1 };
+    },
+    clearNotice() {
+      this.notice = null;
     },
     setPanelTab(tab: PanelTab) {
       this.panelTab = tab;

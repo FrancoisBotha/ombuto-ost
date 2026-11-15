@@ -77,14 +77,27 @@ app's files were fetched, as with any web page. It never sees your tree.
   any time, as a new unsaved tree.
 - **Build the tree**: projects, outcomes, opportunities, solutions, assumptions and evidence. Add a
   child with the `+` on a node, or drag a type from the palette. Double-click a title to rename.
-  Drag a node onto another to move it under that node. To change the order, drag a node sideways
-  past a sibling and drop it level with them, where the line shows (Alt+Left / Alt+Right does the
-  same from the keyboard). Projects re-order this way too: top-level projects among themselves,
-  sub-projects among the sub-projects of the same project.
+  Drag a node onto another to move it under that node. A gap is a place too: drop a node in a gap
+  of a row of nodes of its own type, where the line shows, and it lands there. Among its own
+  siblings that changes the order (Alt+Left / Alt+Right does the same from the keyboard); in
+  another row it moves the node to that row's parent, at that place. A drop that would change
+  nothing shows no line.
 - **Projects inside projects**: a project holds outcomes and other projects. "+ Project" in the
   toolbar adds a top-level project; the `+` on a project, or Project in the palette, adds a
-  sub-project. Drag a project onto another project to nest it, and use "Move to top level" in its
-  details to take it back out.
+  sub-project. Drag a project onto another project to nest it. To take it back out, drag it up
+  and drop it level with the top-level projects, where the line shows; or press Alt+Up on it
+  (out one level each time); or choose "Move to top level" from its `+` menu or its details. While
+  the project picker shows a single project the top row is not on screen, so use the keyboard or
+  the menu there.
+- **Undo and redo**: Ctrl/Cmd+Z takes back the last change to the tree, and Ctrl/Cmd+Shift+Z or
+  Ctrl+Y makes it again; the two arrows in the toolbar do the same and say what they will undo.
+  Every change to the tree counts (add, delete with everything under it, rename, move, every
+  field, links, open questions, the tree's name), up to the last 100. What you type in one field
+  in one go is one step. While the cursor is in a text field the keys undo your typing in that
+  field, as in any text box; they undo the tree once you leave it. Undoing back to the tree as it
+  was last saved shows "Saved" again. The history is kept in memory for the tab: it is gone after
+  a reload, and when you start or open another tree. It is never written into the `.ost` file.
+  View settings (selection, collapsed branches, zoom) are not part of it.
 - **Details**: select a node to edit its notes and fields, add named links, and (for opportunities)
   keep a list of open questions.
 - **Find your way**: search, filter by type, collapse branches, minimap, and the project picker,
@@ -190,8 +203,8 @@ npm run preview    # serve the built dist/ locally
 The service worker exists only in the built app (`npm run build` then `npm run preview`), not on
 the dev server.
 
-Layout: `src/ost/` is the tree editor (canvas, panel, stores), `src/doc/` the document, file access
-and autosave (one working copy per tab: `autosave-slots.ts`), `src/export/` the PNG / SVG / Markdown export, `src/privacy/` the privacy indicator,
+Layout: `src/ost/` is the tree editor (canvas, panel, stores), `src/doc/` the document, file access,
+undo history (`history.ts`) and autosave (one working copy per tab: `autosave-slots.ts`), `src/export/` the PNG / SVG / Markdown export, `src/privacy/` the privacy indicator,
 `src/pwa/` the update prompt, and `config/` the Content Security Policy and the web manifest.
 
 ## Host it yourself

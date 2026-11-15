@@ -1,4 +1,4 @@
-import { computed, markRaw, ref, shallowRef } from 'vue';
+import { computed, markRaw, nextTick, ref, shallowRef } from 'vue';
 
 import { defineStore } from 'pinia';
 
@@ -77,6 +77,12 @@ export const useDocumentStore = defineStore('document', () => {
   let reloadClearedAt = -1;
   /** The opened file as this tab last saw it on disk (see `fileStamp`). */
   let stamp: string | null = null;
+  /**
+   * The state of the document (`service.mark()`) that needs no saving: the one last saved to a
+   * file, or the one a file or a new tree started in. Null when there is none (a working copy
+   * restored with unsaved changes). An undo or redo that comes back to it reads as saved again.
+   */
+  let cleanMark: object | null = null;
 
   // ---- state -----------------------------------------------------------------------------------
   /** False until the autosaved document (if any) has been looked for. */
@@ -110,6 +116,9 @@ export const useDocumentStore = defineStore('document', () => {
   const pendingDownloaded = ref(false);
   /** A working copy from an earlier visit that could not be read (start-up). */
   const unreadable = ref<UnreadableCopy | null>(null);
+  /** What Undo / Redo would do, in words ("delete “Weekly planner”"); null when there is nothing to undo / redo. */
+  const undoLabel = ref<string | null>(null);
+  const redoLabel = ref<string | null>(null);
 
   /** Save writes straight back to the opened file (Chromium); otherwise it downloads a copy. */
   const savesInPlace = computed(() => handle.value !== null);
@@ -166,10 +175,17 @@ export const useDocumentStore = defineStore('document', () => {
     return kept && autosavedRevision === revision;
   }
 
+  function followHistory() {
+    undoLabel.value = service.undoStep?.label ?? null;
+    redoLabel.value = service.redoStep?.label ?? null;
+  }
+
+  // Every edit, undo and redo. The autosaved working copy always follows the document as it is now.
   service.onChange(() => {
     revision += 1;
-    dirty.value = true;
+    dirty.value = service.mark() !== cleanMark;
     name.value = service.name;
+    followHistory();
     scheduleAutosave();
   });
 
@@ -214,6 +230,9 @@ export const useDocumentStore = defineStore('document', () => {
     lastSavedAt.value = origin.savedAt ?? null;
     savedBy.value = origin.savedBy ?? (origin.fileName ? 'file' : null);
     stamp = origin.stamp ?? null;
+    // Another document: its history starts empty (the service cleared it in `open`).
+    cleanMark = dirty.value ? null : service.mark();
+    followHistory();
     hasDocument.value = true;
     error.value = null;
     session.value += 1;
@@ -221,14 +240,29 @@ export const useDocumentStore = defineStore('document', () => {
     else await writeAutosave();
   }
 
+  /** The document as it is when a save starts: the state the file will hold. */
+  interface SaveStart {
+    session: number;
+    mark: object | null;
+  }
+  function startSave(): SaveStart {
+    // A save is a boundary: typing that carries on afterwards is a new step, so the saved state
+    // stays one that undo can come back to.
+    service.sealHistory();
+    return { session: session.value, mark: service.mark() };
+  }
+
   /**
    * Records a save that has just finished. `saved` is the document as it was when the save started:
    * an edit made while the picker was open or the file was being written is not in the file, so the
    * document stays unsaved; and when another document was opened meanwhile, nothing is recorded.
    */
-  function markSaved(saved: { revision: number; session: number }, savedTo: string, savedHandle: FileSystemFileHandle | null, by: SavedBy) {
+  function markSaved(saved: SaveStart, savedTo: string, savedHandle: FileSystemFileHandle | null, by: SavedBy) {
     if (saved.session !== session.value) return;
-    if (saved.revision === revision) dirty.value = false;
+    // The file holds the state the save started from: that state is the saved one from now on,
+    // also when an undo or redo comes back to it later.
+    cleanMark = saved.mark;
+    dirty.value = service.mark() !== cleanMark;
     fileName.value = savedTo;
     handle.value = savedHandle ? markRaw(savedHandle) : null;
     lastSavedAt.value = new Date().toISOString();
@@ -369,7 +403,10 @@ export const useDocumentStore = defineStore('document', () => {
     const created = await tree.createProject();
     // Creating the first project is part of "New", not a change the user has to save or lose.
     if (created) {
+      service.clearHistory();
+      cleanMark = service.mark();
       dirty.value = false;
+      followHistory();
       await writeAutosave();
     }
   }
@@ -403,7 +440,7 @@ export const useDocumentStore = defineStore('document', () => {
     if (!doc) return false;
     const target = handle.value;
     if (!target) return saveAs();
-    const saved = { revision, session: session.value };
+    const saved = startSave();
     try {
       await writeToHandle(target, serializeDocument(doc), stamp);
     } catch (err) {
@@ -426,7 +463,7 @@ export const useDocumentStore = defineStore('document', () => {
     if (!doc) return false;
     const text = serializeDocument(doc);
     const suggested = fileNameFor(doc.name);
-    const saved = { revision, session: session.value };
+    const saved = startSave();
     try {
       if (supportsFileHandles()) {
         const target = await pickFileToSave(suggested, text);
@@ -451,6 +488,54 @@ export const useDocumentStore = defineStore('document', () => {
   /** Renames the document (the name is part of the file, so this is a change to save). */
   function rename(next: string) {
     if (hasDocument.value) name.value = service.rename(next);
+  }
+
+  // ---- actions: undo / redo ---------------------------------------------------------------------
+  /**
+   * Takes back the last change to the tree (`undo`) or makes the last undone one again (`redo`).
+   * Text still being typed goes into the document first, as a change of its own, so it is neither
+   * lost nor brought back by surprise. The tree on screen is replaced by the restored state; the
+   * view (selection, collapsed branches, focused project, zoom) stays, minus whatever pointed at a
+   * node that is gone. False when there was nothing to undo / redo.
+   *
+   * When the change was to a node that is not on the canvas before or after (outside the focused
+   * project, inside a collapsed branch), a short notice says what happened.
+   */
+  async function travel(direction: 'undo' | 'redo'): Promise<boolean> {
+    if (!hasDocument.value || pendingAction.value) return false;
+    flushPendingEdits();
+    // An edit applies to the tree on screen one tick after the service took it: let those land
+    // before the tree is replaced, so none of them writes an old value over the restored one.
+    await nextTick();
+    await nextTick();
+    const planned = direction === 'undo' ? service.undoStep : service.redoStep;
+    if (!planned || !hasDocument.value) return false;
+    const shown = (key: string | null) => key === null || !!tree.placed[key];
+    const shownBefore = shown(planned.nodeKey);
+    try {
+      service[direction]();
+    } catch {
+      error.value = 'That step could not be put back. The tree is unchanged.';
+      return false;
+    }
+    try {
+      tree.replace(tree.prepare(service.readTree()));
+    } catch {
+      service[direction === 'undo' ? 'redo' : 'undo']();
+      error.value = 'That step could not be put back. The tree is unchanged.';
+      return false;
+    }
+    const text = `${direction === 'undo' ? 'Undid' : 'Redid'}: ${planned.label}`;
+    useOstUiStore().notify(text, !shownBefore && !shown(planned.nodeKey));
+    return true;
+  }
+
+  const undo = () => travel('undo');
+  const redo = () => travel('redo');
+
+  /** The next edit is an undo step of its own: a field lost the focus. */
+  function sealHistory() {
+    service.sealHistory();
   }
 
   // ---- leaving the page ------------------------------------------------------------------------
@@ -482,6 +567,8 @@ export const useDocumentStore = defineStore('document', () => {
     pendingAction,
     pendingDownloaded,
     unreadable,
+    undoLabel,
+    redoLabel,
     session,
     savesInPlace,
     // the document itself (read it with `service.snapshot()`)
@@ -499,6 +586,9 @@ export const useDocumentStore = defineStore('document', () => {
     save,
     saveAs,
     rename,
+    undo,
+    redo,
+    sealHistory,
     flushAutosave,
     clearToReload,
     warnsBeforeLeaving,

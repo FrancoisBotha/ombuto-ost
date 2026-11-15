@@ -73,103 +73,168 @@ function mulberry32(seed: number) {
   };
 }
 
-describe('the document service and the file format agree', () => {
-  it.each([1, 2, 3, 4, 5, 6, 7, 8])('any sequence of service calls leaves a document that opens again (seed %i)', async seed => {
-    const random = mulberry32(seed);
-    const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
-    const TYPES: ApiNodeType[] = ['PROJECT', 'OUTCOME', 'OPPORTUNITY', 'SOLUTION', 'ASSUMPTION', 'EVIDENCE'];
-    // Hostile on purpose: empty, too long, control characters, astral characters, lone surrogates, markup.
-    const TEXTS = [
-      '',
-      ' ',
-      'ok',
-      'A title',
-      'x'.repeat(99),
-      'y'.repeat(600),
-      '\u0000\u001f\n\t"\\',
-      '😀'.repeat(40),
-      '\ud800 lone',
-      '<b>&</b>',
-      '  padded  ',
-    ];
-    const URLS = [
-      'https://example.com/a',
-      'mailto:a@example.com',
-      'javascript:alert(1)',
-      '',
-      'http://x',
-      `https://example.com/${'p'.repeat(2100)}`,
-    ];
-    const NUMBERS = [-1, 0, 1, 3, 5, 50, 100, 101, 2.5, Number.NaN, Number.MAX_SAFE_INTEGER];
+const TYPES: ApiNodeType[] = ['PROJECT', 'OUTCOME', 'OPPORTUNITY', 'SOLUTION', 'ASSUMPTION', 'EVIDENCE'];
+// Hostile on purpose: empty, too long, control characters, astral characters, lone surrogates, markup.
+const TEXTS = [
+  '',
+  ' ',
+  'ok',
+  'A title',
+  'x'.repeat(99),
+  'y'.repeat(600),
+  '\u0000\u001f\n\t"\\',
+  '😀'.repeat(40),
+  '\ud800 lone',
+  '<b>&</b>',
+  '  padded  ',
+];
+const URLS = [
+  'https://example.com/a',
+  'mailto:a@example.com',
+  'javascript:alert(1)',
+  '',
+  'http://x',
+  `https://example.com/${'p'.repeat(2100)}`,
+];
+const NUMBERS = [-1, 0, 1, 3, 5, 50, 100, 101, 2.5, Number.NaN, Number.MAX_SAFE_INTEGER];
 
-    const service = new LocalDocumentService();
-    // Start from the nastiest ids a valid file can carry.
-    const top = Number.MAX_SAFE_INTEGER;
-    service.open(
-      validateDocument(
-        docOf(
-          node(top, 'project', null, { sortOrder: Number.MAX_VALUE }),
-          node(top - 1, 'outcome', top),
-          node(top - 2, 'opportunity', top - 1, {
-            links: [{ id: top, name: 'Link', url: 'https://example.com' }],
-            questions: [{ id: top, text: 'Question?', done: false }],
-          }),
-        ),
+/** A service holding the nastiest ids a valid file can carry. */
+function hostileStart(): LocalDocumentService {
+  const service = new LocalDocumentService();
+  const top = Number.MAX_SAFE_INTEGER;
+  service.open(
+    validateDocument(
+      docOf(
+        node(top, 'project', null, { sortOrder: Number.MAX_VALUE }),
+        node(top - 1, 'outcome', top),
+        node(top - 2, 'opportunity', top - 1, {
+          links: [{ id: top, name: 'Link', url: 'https://example.com' }],
+          questions: [{ id: top, text: 'Question?', done: false }],
+        }),
       ),
-    );
+    ),
+  );
+  return service;
+}
 
-    for (let step = 0; step < 400; step++) {
-      const nodes = service.snapshot()!.nodes;
-      const any = () => pick(nodes.length ? nodes : [node(1, 'project', null)]);
-      const target = any();
-      const links = nodes.flatMap(n => n.links);
-      const questions = nodes.flatMap(n => n.questions);
-      const attempt: Promise<unknown> = pick([
-        () => service.createNode({ type: 'PROJECT', parentType: null, parentId: null, title: pick(TEXTS) }),
-        () =>
-          service.createNode({
-            type: pick(TYPES),
-            parentType: target.type.toUpperCase() as ApiNodeType,
-            parentId: target.id,
-            title: pick(TEXTS),
-          }),
-        () => service.createNode({ type: 'OPPORTUNITY', parentType: target.type.toUpperCase() as ApiNodeType, parentId: target.id }),
-        () =>
-          service.patchNode(target.type, target.id, {
-            ...(random() < 0.5 ? { title: pick(TEXTS) } : {}),
-            ...(random() < 0.5 ? { notes: random() < 0.2 ? 'n'.repeat(NOTES_MAX + (random() < 0.5 ? 0 : 1)) : pick(TEXTS) } : {}),
-            ...(random() < 0.3 ? { status: pick(['EXPLORING', 'candidate', 'nope', 'SUPPORTED', '']) } : {}),
-            ...(random() < 0.3 ? { confidence: pick(NUMBERS) } : {}),
-            ...(random() < 0.3 ? { priority: pick(NUMBERS) } : {}),
-            ...(random() < 0.3 ? { valueRating: pick(NUMBERS) } : {}),
-            ...(random() < 0.3 ? { owner: pick([...TEXTS, null]) } : {}),
-          }),
-        () => {
-          const parent = any();
-          return service.moveNode({
-            nodeType: target.type.toUpperCase() as ApiNodeType,
-            nodeId: target.id,
-            parentType: target.type === 'project' ? null : (parent.type.toUpperCase() as ApiNodeType),
-            parentId: target.type === 'project' ? null : parent.id,
-            ...(random() < 0.6 ? { position: pick([0, 1, 2, 7, -1, 1.5]) } : {}),
-          });
-        },
-        () => (random() < 0.15 ? service.deleteNode(target.type, target.id) : Promise.resolve()),
-        () => service.addLink(target.type, target.id, { name: pick(TEXTS), url: pick(URLS) }),
-        () => (links.length ? service.updateLink(pick(links).id, { name: pick(TEXTS), url: pick(URLS) }) : Promise.resolve()),
-        () => (links.length && random() < 0.3 ? service.deleteLink(pick(links).id) : Promise.resolve()),
-        () => service.addQuestion(target.id, pick(TEXTS)),
-        () =>
-          questions.length ? service.updateQuestion(pick(questions).id, { text: pick(TEXTS), done: random() < 0.5 }) : Promise.resolve(),
-        () => (questions.length && random() < 0.3 ? service.deleteQuestion(pick(questions).id) : Promise.resolve()),
-        () => Promise.resolve(service.rename(pick(TEXTS))),
-      ])();
-      // A refusal is fine (and leaves the document untouched); anything else is a bug.
-      await attempt.catch(err => expect(err).toBeInstanceOf(RuleError));
-      if (step % 20 === 0) expectReopens(service);
-    }
-    expectReopens(service);
-  });
+/** One random call on the service: any write, with any arguments. It may be refused. */
+function randomEdit(service: LocalDocumentService, random: () => number): Promise<unknown> {
+  const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
+  const nodes = service.snapshot()!.nodes;
+  const any = () => pick(nodes.length ? nodes : [node(1, 'project', null)]);
+  const target = any();
+  const links = nodes.flatMap(n => n.links);
+  const questions = nodes.flatMap(n => n.questions);
+  return pick([
+    () => service.createNode({ type: 'PROJECT', parentType: null, parentId: null, title: pick(TEXTS) }),
+    () =>
+      service.createNode({
+        type: pick(TYPES),
+        parentType: target.type.toUpperCase() as ApiNodeType,
+        parentId: target.id,
+        title: pick(TEXTS),
+      }),
+    () => service.createNode({ type: 'OPPORTUNITY', parentType: target.type.toUpperCase() as ApiNodeType, parentId: target.id }),
+    () =>
+      service.patchNode(target.type, target.id, {
+        ...(random() < 0.5 ? { title: pick(TEXTS) } : {}),
+        ...(random() < 0.5 ? { notes: random() < 0.2 ? 'n'.repeat(NOTES_MAX + (random() < 0.5 ? 0 : 1)) : pick(TEXTS) } : {}),
+        ...(random() < 0.3 ? { status: pick(['EXPLORING', 'candidate', 'nope', 'SUPPORTED', '']) } : {}),
+        ...(random() < 0.3 ? { confidence: pick(NUMBERS) } : {}),
+        ...(random() < 0.3 ? { priority: pick(NUMBERS) } : {}),
+        ...(random() < 0.3 ? { valueRating: pick(NUMBERS) } : {}),
+        ...(random() < 0.3 ? { owner: pick([...TEXTS, null]) } : {}),
+      }),
+    () => {
+      const parent = any();
+      return service.moveNode({
+        nodeType: target.type.toUpperCase() as ApiNodeType,
+        nodeId: target.id,
+        parentType: target.type === 'project' ? null : (parent.type.toUpperCase() as ApiNodeType),
+        parentId: target.type === 'project' ? null : parent.id,
+        ...(random() < 0.6 ? { position: pick([0, 1, 2, 7, -1, 1.5]) } : {}),
+      });
+    },
+    () => {
+      // Projects into projects, and back out: the moves that change depth.
+      const parent = any();
+      return service.moveNode({
+        nodeType: target.type.toUpperCase() as ApiNodeType,
+        nodeId: target.id,
+        parentType: parent.type.toUpperCase() as ApiNodeType,
+        parentId: parent.id,
+        ...(random() < 0.5 ? { position: pick([0, 1, 2]) } : {}),
+      });
+    },
+    () => (random() < 0.15 ? service.deleteNode(target.type, target.id) : Promise.resolve()),
+    () => service.addLink(target.type, target.id, { name: pick(TEXTS), url: pick(URLS) }),
+    () => (links.length ? service.updateLink(pick(links).id, { name: pick(TEXTS), url: pick(URLS) }) : Promise.resolve()),
+    () => (links.length && random() < 0.3 ? service.deleteLink(pick(links).id) : Promise.resolve()),
+    () => service.addQuestion(target.id, pick(TEXTS)),
+    () => (questions.length ? service.updateQuestion(pick(questions).id, { text: pick(TEXTS), done: random() < 0.5 }) : Promise.resolve()),
+    () => (questions.length && random() < 0.3 ? service.deleteQuestion(pick(questions).id) : Promise.resolve()),
+    () => Promise.resolve(service.rename(pick(TEXTS))),
+  ])();
+}
+
+describe('the document service and the file format agree', () => {
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+    'any sequence of service calls, undo and redo included, leaves a document that opens again (seed %i)',
+    async seed => {
+      const random = mulberry32(seed);
+      const service = hostileStart();
+      for (let step = 0; step < 400; step++) {
+        const roll = random();
+        // About one call in four steps through the history instead of editing.
+        const attempt =
+          roll < 0.15 ? Promise.resolve(service.undo()) : roll < 0.25 ? Promise.resolve(service.redo()) : randomEdit(service, random);
+        // A refusal is fine (and leaves the document untouched); anything else is a bug.
+        await attempt.catch(err => expect(err).toBeInstanceOf(RuleError));
+        if (step % 20 === 0 || roll < 0.25) expectReopens(service);
+      }
+      expectReopens(service);
+    },
+  );
+
+  it.each([11, 12, 13, 14])(
+    'undoing every step returns exactly the starting document, redoing them the final one (seed %i)',
+    async seed => {
+      const random = mulberry32(seed);
+      const service = hostileStart();
+      const start = serializeDocument(service.snapshot()!);
+      // Fewer edits than the history holds, so every one of them can be taken back.
+      const states = [start];
+      for (let step = 0; step < 90; step++) {
+        await randomEdit(service, random).catch(err => expect(err).toBeInstanceOf(RuleError));
+        const now = serializeDocument(service.snapshot()!);
+        if (now !== states.at(-1)) states.push(now);
+      }
+      const end = states.at(-1)!;
+      expect(states.length).toBeGreaterThan(20);
+
+      let undone = 0;
+      while (service.undo()) {
+        undone++;
+        // Every state on the way back is one the edits passed through, and one a file can hold.
+        expect(states).toContain(serializeDocument(service.snapshot()!));
+        expectReopens(service);
+      }
+      expect(undone).toBeGreaterThan(10);
+      expect(serializeDocument(service.snapshot()!)).toBe(start);
+
+      let redone = 0;
+      while (service.redo()) redone++;
+      expect(redone).toBe(undone);
+      expect(serializeDocument(service.snapshot()!)).toBe(end);
+      expectReopens(service);
+
+      // Half way back, then an edit: the document still opens and the rest of the redo is gone.
+      for (let i = 0; i < Math.floor(undone / 2); i++) service.undo();
+      await service.createNode({ type: 'PROJECT', parentType: null, parentId: null, title: 'After undo' });
+      expect(service.redo()).toBeNull();
+      expectReopens(service);
+    },
+  );
 
   it('new nodes, links and questions get usable ids when the file already uses the largest id there is', async () => {
     const top = Number.MAX_SAFE_INTEGER;

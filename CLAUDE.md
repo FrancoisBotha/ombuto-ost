@@ -63,6 +63,19 @@ loading the app's own static files.
   - Each tab has its own autosave slot (`src/doc/autosave-slots.ts`). Nothing may write a slot
     another live tab holds, and an unreadable working copy is never deleted without the user
     asking.
+- **Undo and redo live in the document layer** (`src/doc/history.ts`, owned by the document
+  service): whole document states that share what did not change, at most 100 steps, in memory
+  only. Every write through the service is a step, so a new kind of write needs nothing extra
+  except a `describe(...)` for its label, and a coalescing key if it is typed text (one burst of
+  typing in one field is one step). `undo` / `redo` put a state back through `validateDocument`,
+  and ids are never reused, so both rules above keep holding. The document store's `undo` / `redo`
+  flush pending edits first and replace the tree on screen without resetting the view
+  (`tree.replace`). The saved / unsaved flag compares the state the document is in
+  (`service.mark()`) with the state that was last saved. History is never written to a file or to
+  the autosaved working copy, and Ctrl/Cmd+Z in a text field stays the browser's own.
+- **A parent or an order changes through `tree.moveNode` only.** Dropping on a node, dropping in a
+  gap (`src/ost/canvas/drag-reorder.ts`: any row of same-type nodes on the canvas, the top-level
+  projects included), Alt+arrows and "Move to top level" all end there.
 - Colours come from the tokens in `src/ost/styles/` (`theme.css` holds the hex values once;
   `ost-tokens.css` assigns the roles). Do not hard-code colours in components.
 - Every address is relative (`base: './'`, manifest `scope` and `start_url`): the app must work

@@ -125,9 +125,9 @@ export function newNodeFields(type: NodeType): Pick<DocNode, 'status' | 'confide
 /** Title given to a node created without one. */
 export const defaultTitle = (type: NodeType): string => (type === 'evidence' ? 'New snippet' : `New ${type}`);
 
-/** Trimmed document name, or the default when nothing usable is left. */
+/** Trimmed document name, or the default when nothing usable is left. Cleaning a clean name changes nothing. */
 export function cleanDocumentName(raw: string): string {
-  const name = raw.replace(/\s+/g, ' ').trim().slice(0, DOCUMENT_NAME_MAX);
+  const name = raw.replace(/\s+/g, ' ').trim().slice(0, DOCUMENT_NAME_MAX).trimEnd();
   return name || DEFAULT_DOCUMENT_NAME;
 }
 

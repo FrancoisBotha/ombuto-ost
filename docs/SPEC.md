@@ -23,6 +23,8 @@ It is a port of the tree editor from the enterprise app at
   collapse/expand, search, minimap, legend, project picker, detail panel with fields and notes,
   **Links** tab (plain named URLs), **Open questions** tab, and **Export** to PNG, SVG and
   Markdown.
+- Added: **undo / redo** of every change to the tree (document-level history of whole states, at
+  most 100 steps, in memory for the tab only, never in the file; `src/doc/history.ts`).
 - Removed features: teams, members, roles, sign-in, live collaboration/realtime, chat and
   comments, meeting transcripts, node history, labels/tags, the experiments page, the trees
   dashboard, the team switcher, the full-page node detail view, MCP, admin.
@@ -34,7 +36,9 @@ It is a port of the tree editor from the enterprise app at
     into its own subtree; nested projects count towards the 64-level and 1,000-node limits.
     - One way to each kind: "+ Project" in the toolbar makes a top-level project; the `+` menu
       of a project and the palette's Project card make a sub-project. Dragging a project onto
-      another nests it; "Move to top level" in the detail panel takes a sub-project back out.
+      another nests it. Dropping a sub-project level with the top-level projects (a drop in a gap of
+      any row of same-type nodes places the node there), Alt+Up, or "Move to top level" in its
+      `+` menu or the detail panel takes it back out.
     - The project picker lists every project, indented by nesting. Choosing one focuses the
       canvas on that project's subtree (type counts, search, collapse / expand all, minimap, fit
       and export follow it); "All projects" shows everything.

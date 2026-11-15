@@ -11,6 +11,11 @@
  *
  * The service and the file format agree: whatever sequence of calls is made here, the document it
  * holds is one `validateDocument` accepts, so the app never saves a file it cannot open again.
+ *
+ * It also keeps the history (history.ts): every change made here is a step that `undo` takes back
+ * and `redo` makes again. Both put a whole earlier state back, through `validateDocument` — the
+ * check a file goes through on open — so a restored document is held to every limit too. Ids are
+ * part of the state and are never handed out twice, so a node that comes back is the node it was.
  */
 import { TITLE_MIN, titleMax } from '@/ost/canvas/edit-rules';
 import { nodeKey, toNodeType } from '@/ost/domain/mapping';
@@ -46,7 +51,9 @@ import {
   defaultTitle,
   newNodeFields,
   nodeWeight,
+  validateDocument,
 } from './document';
+import { type Change, type DocState, DocumentHistory, type HistoryStep, captureState } from './history';
 
 /** Which node types each patchable field applies to. */
 const APPLICABLE: Record<keyof PatchNodeRequest, NodeType[] | 'all'> = {
@@ -61,6 +68,17 @@ const APPLICABLE: Record<keyof PatchNodeRequest, NodeType[] | 'all'> = {
 
 const isIntIn = (value: unknown, min: number, max: number): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+
+/** How a change to each field reads in the history ("Undo rename …"); typing in a `text` field is one step. */
+const FIELD_CHANGE: Record<keyof PatchNodeRequest, { verb: string; text?: boolean }> = {
+  title: { verb: 'rename', text: true },
+  notes: { verb: 'edit notes of', text: true },
+  status: { verb: 'change status of' },
+  confidence: { verb: 'change confidence of' },
+  priority: { verb: 'change priority of' },
+  valueRating: { verb: 'change value of' },
+  owner: { verb: 'edit owner of', text: true },
+};
 
 const bySortOrder = (a: DocNode, b: DocNode) => a.sortOrder - b.sortOrder || a.id - b.id;
 
@@ -122,10 +140,13 @@ export default class LocalDocumentService {
   /** Running total of `nodeWeight` over the document (see MAX_NODES_WEIGHT). */
   private weight = 0;
   private listener: () => void = () => {};
+  private readonly history = new DocumentHistory();
+  /** What the write in progress is, for the history; set by the write itself. */
+  private change: Change | null = null;
 
   // ---- document lifecycle ------------------------------------------------------------------------
 
-  /** Called after every change to the open document (the document store marks it dirty and autosaves). */
+  /** Called after every change to the open document, an undo or redo included (the document store autosaves). */
   onChange(listener: () => void): void {
     this.listener = listener;
   }
@@ -137,10 +158,12 @@ export default class LocalDocumentService {
     this.linkIds.reset();
     this.questionIds.reset();
     this.weight = this.doc.nodes.reduce((sum, n) => sum + nodeWeight(n), 0);
+    this.clearHistory();
   }
 
   close(): void {
     this.doc = null;
+    this.clearHistory();
   }
 
   get isOpen(): boolean {
@@ -162,16 +185,61 @@ export default class LocalDocumentService {
     const next = cleanDocumentName(name);
     if (next !== doc.name) {
       doc.name = next;
+      this.record({ verb: 'rename the tree', key: 'name' });
       this.listener();
     }
     return doc.name;
   }
 
+  // ---- history -------------------------------------------------------------------------------------
+
+  /** The step `undo()` would take back, in words; null when there is none. */
+  get undoStep(): HistoryStep | null {
+    return this.history.undoStep;
+  }
+
+  get redoStep(): HistoryStep | null {
+    return this.history.redoStep;
+  }
+
+  /**
+   * Names the state the document is in: the same value for as long as nothing changes, and again
+   * whenever an undo or redo comes back to that state. Null when no document is open.
+   */
+  mark(): object | null {
+    return this.history.present;
+  }
+
+  /** The next edit is a step of its own (a field was left, the document was saved). */
+  sealHistory(): void {
+    this.history.seal();
+  }
+
+  /** Forgets every step: nothing to undo or redo. The document stays as it is. */
+  clearHistory(): void {
+    this.history.reset(this.doc ? captureState(this.doc, this.weight) : null);
+  }
+
+  /** Takes back the last step. Returns it, or null when there was nothing to undo. */
+  undo(): HistoryStep | null {
+    return this.restore(this.history.peekUndo(), () => this.history.undo());
+  }
+
+  /** Makes the last undone step again. Returns it, or null when there was nothing to redo. */
+  redo(): HistoryStep | null {
+    return this.restore(this.history.peekRedo(), () => this.history.redo());
+  }
+
   // ---- tree read -----------------------------------------------------------------------------------
+
+  /** Every node of the open document, now. */
+  readTree(): TreeNodeDTO[] {
+    return readTree(this.require());
+  }
 
   /** Every node of the open document. */
   getTree(): Promise<TreeNodeDTO[]> {
-    return this.run(() => readTree(this.require()));
+    return this.run(() => this.readTree());
   }
 
   // ---- nodes ---------------------------------------------------------------------------------------
@@ -203,6 +271,8 @@ export default class LocalDocumentService {
       this.charge(nodeWeight(node));
       node.id = this.nodeIds.take();
       doc.nodes.push(node);
+      // Naming the new node straight away belongs to adding it: one step.
+      this.describe('add', node, `title:${node.id}`);
       return this.toDto(node);
     });
   }
@@ -246,6 +316,9 @@ export default class LocalDocumentService {
       // Every value was checked before anything is applied: a refused patch changes nothing.
       this.charge(nodeWeight({ ...node, ...next }) - nodeWeight(node));
       Object.assign(node, next, { lastModifiedDate: new Date().toISOString() });
+      const fields = Object.keys(next) as (keyof PatchNodeRequest)[];
+      const one = fields.length === 1 ? FIELD_CHANGE[fields[0]] : null;
+      this.describe(one?.verb ?? 'edit', node, one?.text ? `${fields[0]}:${node.id}` : undefined);
       return this.toDto(node);
     });
   }
@@ -280,6 +353,7 @@ export default class LocalDocumentService {
         node.lastModifiedDate = new Date().toISOString();
       }
       for (const group of groups) group.forEach((n, i) => (n.sortOrder = i));
+      this.describe(reparented ? 'move' : 'reorder', node);
       return {
         node: this.toDto(node),
         siblings: groups.flat().map(n => ({ key: nodeKey(n.type, n.id), sortOrder: n.sortOrder })),
@@ -294,6 +368,7 @@ export default class LocalDocumentService {
       const node = this.find(this.type(type), id);
       const doomed = this.subtreeIds(node.id);
       doomed.add(node.id);
+      this.describe('delete', node);
       doc.nodes = doc.nodes.filter(n => {
         if (!doomed.has(n.id)) return true;
         this.weight -= nodeWeight(n);
@@ -313,6 +388,7 @@ export default class LocalDocumentService {
       created.id = this.linkIds.take();
       node.links.push(created);
       this.touch(node);
+      this.describe('add a link to', node);
       return { ...created };
     });
   }
@@ -326,6 +402,7 @@ export default class LocalDocumentService {
       this.charge(nodeWeight({ ...node, links }) - nodeWeight(node));
       Object.assign(link, { name, url });
       this.touch(node);
+      this.describe('edit a link of', node, `link:${link.id}`);
       return { ...link };
     });
   }
@@ -337,6 +414,7 @@ export default class LocalDocumentService {
       node.links.splice(node.links.indexOf(link), 1);
       this.weight += nodeWeight(node) - before;
       this.touch(node);
+      this.describe('remove a link from', node);
     });
   }
 
@@ -351,6 +429,7 @@ export default class LocalDocumentService {
       created.id = this.questionIds.take();
       node.questions.push(created);
       this.touch(node);
+      this.describe('add a question to', node);
       return { ...created };
     });
   }
@@ -364,6 +443,8 @@ export default class LocalDocumentService {
       this.charge(nodeWeight({ ...node, questions }) - nodeWeight(node));
       Object.assign(question, { text, done });
       this.touch(node);
+      // Ticking a question is a step of its own; typing its text is one step.
+      this.describe('edit a question of', node, patch.done === undefined ? `question:${question.id}` : undefined);
       return { ...question };
     });
   }
@@ -375,6 +456,7 @@ export default class LocalDocumentService {
       node.questions.splice(node.questions.indexOf(question), 1);
       this.weight += nodeWeight(node) - before;
       this.touch(node);
+      this.describe('remove a question from', node);
     });
   }
 
@@ -389,13 +471,57 @@ export default class LocalDocumentService {
     }
   }
 
-  /** Runs a change and reports it. Nothing is reported when the change was refused. */
+  /** Runs a change, records it as a step and reports it. A refused change is neither recorded nor reported. */
   private write<T>(action: () => T): Promise<T> {
     return this.run(() => {
+      this.change = null;
       const result = action();
+      this.record(this.change ?? { verb: 'edit' });
       this.listener();
       return result;
     });
+  }
+
+  /** Says what the write in progress is: "<verb> “<the node's title>”". */
+  private describe(verb: string, node: DocNode, key?: string): void {
+    this.change = { verb, title: node.title, nodeKey: nodeKey(node.type, node.id), key };
+  }
+
+  private record(change: Change): void {
+    const takenBack = this.history.record(captureState(this.require(), this.weight, this.history.present), change);
+    if (!takenBack) return;
+    // The edit undid its own step (Escape in a field): the document is again exactly what it was
+    // before the typing began, last-modified date included, so it also reads as saved if it was.
+    try {
+      this.put(takenBack);
+    } catch {
+      this.clearHistory();
+    }
+  }
+
+  /** Makes `state` the working document, by way of the check a file goes through on open. */
+  private put(state: DocState): void {
+    const doc = this.require();
+    this.doc = validateDocument({ format: doc.format, version: doc.version, name: state.name, nodes: state.nodes });
+    this.weight = state.weight;
+  }
+
+  /**
+   * Puts an earlier state in place of the document, by way of the check a file goes through on
+   * open; `step` then moves the history. A state that does not pass (which would be a bug) is
+   * refused: the document and the history stay as they are.
+   */
+  private restore(state: DocState | null, step: () => HistoryStep | null): HistoryStep | null {
+    this.require();
+    if (!state) return null;
+    try {
+      this.put(state);
+    } catch {
+      throw new RuleError('historybroken');
+    }
+    const taken = step();
+    this.listener();
+    return taken;
   }
 
   private require(): OstDocument {

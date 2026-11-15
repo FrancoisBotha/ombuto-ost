@@ -11,6 +11,31 @@
       + Project
     </button>
 
+    <div class="ost-toolbar__history" role="group" aria-label="Undo and redo">
+      <button
+        type="button"
+        class="ost-btn ost-toolbar__zoom-btn"
+        :disabled="undoLabel === null"
+        :title="`${undoName} (${shortcutLabel('Z')})`"
+        :aria-label="undoName"
+        data-cy="ost-undo"
+        @click="emit('undo')"
+      >
+        <PhArrowUUpLeft :size="15" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="ost-btn ost-toolbar__zoom-btn"
+        :disabled="redoLabel === null"
+        :title="`${redoName} (${redoShortcutLabel()})`"
+        :aria-label="redoName"
+        data-cy="ost-redo"
+        @click="emit('redo')"
+      >
+        <PhArrowUUpRight :size="15" aria-hidden="true" />
+      </button>
+    </div>
+
     <label class="ost-toolbar__search">
       <span class="ost-sr-only">Search nodes</span>
       <PhMagnifyingGlass :size="14" class="ost-toolbar__search-icon" aria-hidden="true" />
@@ -100,29 +125,43 @@
 
 <script setup lang="ts">
 /**
- * Canvas toolbar row: project focus · new top-level project · search · collapse / expand all · type-filter chips · zoom −/%/+ · Fit.
+ * Canvas toolbar row: project focus · new top-level project · undo / redo · search · collapse / expand all · type-filter chips · zoom −/%/+ · Fit.
+ *
+ * Undo and Redo say what they would do ("Undo delete “Weekly planner”") in their tooltip and
+ * accessible name, and are disabled when there is nothing to undo / redo. The page owns the action.
  *
  * The search box is also the keyboard way to any node: the canvas only renders the nodes in
  * view, so Tab cannot reach the rest. Enter emits `jump` with the next match (Shift+Enter the
  * previous; it wraps) — in tree order, among the types shown and inside the focused project — and the
  * page selects and centres it. A status line announces "Match 2 of 5: <title>".
  */
-import { PhMagnifyingGlass } from '@phosphor-icons/vue';
+import { PhArrowUUpLeft, PhArrowUUpRight, PhMagnifyingGlass } from '@phosphor-icons/vue';
 import { computed, nextTick, ref, watch } from 'vue';
 
 import { countByType } from '../domain/derive';
 import { TYPE_BOX } from '../domain/rules';
 import type { NodeType } from '../domain/types';
 import { useOstTreeStore } from '../stores/ost-tree.store';
+import { redoShortcutLabel, shortcutLabel } from '../shell/shortcuts';
 import { useOstUiStore } from '../stores/ost-ui.store';
 
 import CanvasProjectCombo from './CanvasProjectCombo.vue';
 import { searchMatches } from './canvas-model';
 
-defineProps<{ zoom: number }>();
+const props = withDefaults(
+  defineProps<{
+    zoom: number;
+    /** What Undo / Redo would do, in words; null when there is nothing to undo / redo. */
+    undoLabel?: string | null;
+    redoLabel?: string | null;
+  }>(),
+  { undoLabel: null, redoLabel: null },
+);
 const emit = defineEmits<{
   project: [projectId: string | 'all'];
   addProject: [];
+  undo: [];
+  redo: [];
   zoomIn: [];
   zoomOut: [];
   fit: [];
@@ -131,6 +170,9 @@ const emit = defineEmits<{
 
 const tree = useOstTreeStore();
 const ui = useOstUiStore();
+
+const undoName = computed(() => (props.undoLabel === null ? 'Nothing to undo' : `Undo ${props.undoLabel}`));
+const redoName = computed(() => (props.redoLabel === null ? 'Nothing to redo' : `Redo ${props.redoLabel}`));
 
 const CHIP_TYPES: NodeType[] = ['outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
 
@@ -235,6 +277,7 @@ const chips = computed(() => {
   background: transparent;
 }
 
+.ost-toolbar__history,
 .ost-toolbar__branches {
   display: flex;
   gap: 4px;

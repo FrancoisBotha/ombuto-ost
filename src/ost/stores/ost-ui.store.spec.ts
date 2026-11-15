@@ -292,6 +292,7 @@ describe('OST UI store', () => {
       editingId: null,
       confirmId: null,
       centreRequest: null,
+      notice: null,
     });
     expect(persisted()).toEqual({ 'outcome-1': true });
   });

@@ -271,6 +271,28 @@ describe('OstNode', () => {
       expect(wrapper.emitted('delete')).toBeUndefined();
     });
 
+    it('Alt+Up asks to move the node out one level', async () => {
+      const wrapper = mountNode(node('project-2', 'project-1'));
+      const root = wrapper.get('.ost-node');
+      expect(root.attributes('aria-keyshortcuts')).toContain('Alt+ArrowUp');
+      await root.trigger('keydown', { key: 'ArrowUp', altKey: true });
+      expect(wrapper.emitted('outdent')).toHaveLength(1);
+      await root.trigger('keydown', { key: 'ArrowUp' });
+      await root.trigger('keydown', { key: 'ArrowDown', altKey: true });
+      expect(wrapper.emitted('outdent')).toHaveLength(1);
+      expect(wrapper.emitted('reorder')).toBeUndefined();
+    });
+
+    it('the + of a sub-project says it can also move the project to the top level; other nodes only add', () => {
+      const sub = mountNode(node('project-2', 'project-1'), { canAdd: true });
+      expect(sub.get('[data-cy="ost-node-add-project-2"]').attributes('title')).toBe('Add child, or move to top level');
+      expect(sub.get('[data-cy="ost-node-add-project-2"]').attributes('aria-label')).toContain('move it to the top level');
+      const top = mountNode(node('project-1', null), { canAdd: true });
+      expect(top.get('[data-cy="ost-node-add-project-1"]').attributes('title')).toBe('Add child');
+      const outcome = mountNode(node('outcome-1', 'project-1'), { canAdd: true });
+      expect(outcome.get('[data-cy="ost-node-add-outcome-1"]').attributes('title')).toBe('Add child');
+    });
+
     it('ignores keys that come from its own buttons', async () => {
       const wrapper = mountNode(node('outcome-1', 'project-1'), { canAdd: true });
       await wrapper.get('[data-cy="ost-node-add-outcome-1"]').trigger('keydown', { key: 'Enter' });

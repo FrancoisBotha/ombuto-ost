@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutosaveRecord } from '@/doc/autosave';
-import { parseDocument, serializeDocument } from '@/doc/document';
+import { MAX_DEPTH, parseDocument, serializeDocument } from '@/doc/document';
 import * as files from '@/doc/file-access';
 import { smallDocument } from '@/doc/small-document.test-util';
 
@@ -11,7 +11,11 @@ import { TYPE_BOX } from '../domain/rules';
 import type { OstNode } from '../domain/types';
 import { setupShellStores } from '../shell/shell.test-util';
 
-import { LEVEL_TOLERANCE, reorderDrop, siblingRow } from './drag-reorder';
+import { LEVEL_TOLERANCE, type SiblingRow, dropRows, gapDrop, reorderDrop } from './drag-reorder';
+
+/** The dragged node's own row: its same-type siblings. Null when it has none on the canvas. */
+const siblingRow = (key: string, nodes: readonly OstNode[], placed: ReturnType<typeof layoutTree>, all = true): SiblingRow | null =>
+  dropRows(key, nodes, placed, all).find(row => row.index >= 0) ?? null;
 
 vi.mock(import('@/doc/file-access'), async importOriginal => {
   const actual = await importOriginal();
@@ -53,7 +57,7 @@ function nested(): OstNode[] {
   ];
 }
 
-describe('siblingRow', () => {
+describe('dropRows: the dragged node among its own siblings', () => {
   it('gives the other same-type siblings in order, and where the dragged node is among them', () => {
     const nodes = topLevel();
     const placed = lay(nodes);
@@ -169,7 +173,151 @@ describe('reorderDrop', () => {
   });
 });
 
-describe('a drag reorder reaches the document', () => {
+describe('dropRows: every row the dragged node can be dropped into', () => {
+  /** project-1 > (outcome-1, project-11 > project-111, project-12, project-13); project-2 > (project-21, project-22); project-3. */
+  function forest(): OstNode[] {
+    return [
+      node('project-1', null, { sortOrder: 0 }),
+      node('outcome-1', 'project-1'),
+      node('project-11', 'project-1', { sortOrder: 0 }),
+      node('project-111', 'project-11'),
+      node('project-12', 'project-1', { sortOrder: 1 }),
+      node('project-13', 'project-1', { sortOrder: 2 }),
+      node('project-2', null, { sortOrder: 1 }),
+      node('project-21', 'project-2', { sortOrder: 0 }),
+      node('project-22', 'project-2', { sortOrder: 1 }),
+      node('project-3', null, { sortOrder: 2 }),
+    ];
+  }
+  const parents = (rows: SiblingRow[]) => rows.map(r => r.parent).sort();
+  const rowOf = (rows: SiblingRow[], parent: string | null) => rows.find(r => r.parent === parent)!;
+
+  it('a sub-project: its own siblings, the sub-projects of every other project, and the top-level projects', () => {
+    const nodes = forest();
+    const placed = lay(nodes);
+    const rows = dropRows('project-12', nodes, placed, true);
+    expect(parents(rows)).toEqual([null, 'project-1', 'project-11', 'project-2'].sort());
+    expect(rowOf(rows, 'project-1')).toMatchObject({ index: 1, y: ROW_PITCH });
+    expect(rowOf(rows, 'project-1').others.map(o => o.id)).toEqual(['project-11', 'project-13']);
+    expect(rowOf(rows, 'project-1').reach).toBeUndefined();
+    // The top-level row: not the node's own, at the top, and with its level to itself.
+    expect(rowOf(rows, null)).toMatchObject({ index: -1, y: 0, h: TYPE_BOX.project.h });
+    expect(rowOf(rows, null).others.map(o => o.id)).toEqual(['project-1', 'project-2', 'project-3']);
+    expect(rowOf(rows, null).reach).toBeUndefined();
+    // Another project's sub-projects: only close to the row counts.
+    expect(rowOf(rows, 'project-2')).toMatchObject({ index: -1, y: ROW_PITCH, reach: GAP_X + W });
+    expect(rowOf(rows, 'project-11')).toMatchObject({ index: -1, y: 2 * ROW_PITCH });
+  });
+
+  it('never offers a row inside the dragged node: a project cannot end up under itself', () => {
+    const nodes = forest();
+    const placed = lay(nodes);
+    expect(parents(dropRows('project-1', nodes, placed, true))).toEqual([null, 'project-2'].sort());
+    expect(parents(dropRows('project-11', nodes, placed, true))).toEqual([null, 'project-1', 'project-2'].sort());
+  });
+
+  it('offers no top-level row while the picker shows a single project: that row is not on screen', () => {
+    const nodes = forest();
+    // Focused on project-1: the other top-level projects are not laid out.
+    const focused = lay(nodes, 'project-1');
+    expect(parents(dropRows('project-12', nodes, focused, false))).toEqual(['project-1', 'project-11'].sort());
+    // Even a tree with one top-level project gets no top row unless every project is shown.
+    const single = nodes.filter(n => !['project-2', 'project-21', 'project-22', 'project-3'].includes(n.id));
+    expect(parents(dropRows('project-12', single, lay(single, 'project-1'), false))).toEqual(['project-1', 'project-11'].sort());
+    expect(parents(dropRows('project-12', single, lay(single), true))).toEqual([null, 'project-1', 'project-11'].sort());
+  });
+
+  it('skips a row that is not laid out (its parent is collapsed)', () => {
+    const nodes = forest();
+    const placed = layoutTree(nodes, { roots: ['project-1', 'project-2', 'project-3'], collapsed: { 'project-2': true } });
+    expect(parents(dropRows('project-12', nodes, placed, true))).toEqual([null, 'project-1', 'project-11'].sort());
+  });
+
+  it('works for every type: an opportunity can go among the opportunities of another outcome, never among solutions', () => {
+    const nodes = [
+      node('project-1', null),
+      node('outcome-1', 'project-1', { sortOrder: 0 }),
+      node('opportunity-1', 'outcome-1', { sortOrder: 0 }),
+      node('opportunity-2', 'outcome-1', { sortOrder: 1 }),
+      node('solution-1', 'opportunity-2'),
+      node('outcome-2', 'project-1', { sortOrder: 1 }),
+      node('opportunity-3', 'outcome-2', { sortOrder: 0 }),
+      node('opportunity-4', 'outcome-2', { sortOrder: 1 }),
+    ];
+    const rows = dropRows('opportunity-1', nodes, lay(nodes), true);
+    expect(parents(rows)).toEqual(['outcome-1', 'outcome-2']);
+    expect(rowOf(rows, 'outcome-2').others.map(o => o.id)).toEqual(['opportunity-3', 'opportunity-4']);
+    // An outcome has nowhere but its own row (the other project has no outcomes to sit between).
+    expect(parents(dropRows('outcome-1', nodes, lay(nodes), true))).toEqual(['project-1']);
+  });
+
+  it('is empty for an unknown node and for one that is not laid out', () => {
+    const nodes = forest();
+    expect(dropRows('project-99', nodes, lay(nodes), true)).toEqual([]);
+    expect(dropRows('project-12', nodes, {}, true)).toEqual([]);
+  });
+
+  describe('gapDrop: the gap a drop lands in', () => {
+    const nodes = forest();
+    const placed = lay(nodes);
+    const x = (key: string) => placed[key].x;
+    const sub = dropRows('project-12', nodes, placed, true);
+
+    it('a sub-project dropped level with the top-level projects becomes one, where its centre is', () => {
+      expect(gapDrop(sub, x('project-1') - 400, 0)).toMatchObject({ parent: null, position: 0 });
+      expect(gapDrop(sub, x('project-1') + 1, 0)).toMatchObject({ parent: null, position: 1 });
+      expect(gapDrop(sub, x('project-2') + 1, 0)).toMatchObject({ parent: null, position: 2 });
+      expect(gapDrop(sub, x('project-3') + 9000, 0)).toMatchObject({ parent: null, position: 3 });
+      // Half a row of tolerance, like a re-order.
+      expect(gapDrop(sub, x('project-2') + 1, LEVEL_TOLERANCE)).toMatchObject({ parent: null, position: 2 });
+      expect(gapDrop(sub, x('project-2') + 1, -LEVEL_TOLERANCE)).toMatchObject({ parent: null, position: 2 });
+    });
+
+    it('the marker is in the gap it will land in, on the row it will land in', () => {
+      const drop = gapDrop(sub, x('project-1') + 1, 0)!;
+      expect(drop.x).toBe((x('project-1') + W / 2 + (x('project-2') - W / 2)) / 2);
+      expect(drop.row).toMatchObject({ y: 0, h: TYPE_BOX.project.h });
+      expect(gapDrop(sub, x('project-1') - 400, 0)!.x).toBe(x('project-1') - W / 2 - GAP_X / 2);
+    });
+
+    it('level with its own siblings it re-orders, and where nothing changes it is no drop', () => {
+      expect(gapDrop(sub, x('project-12'), ROW_PITCH)).toBeNull();
+      expect(gapDrop(sub, x('project-11') - 1, ROW_PITCH)).toMatchObject({ parent: 'project-1', position: 0 });
+      expect(gapDrop(sub, x('project-13') + 1, ROW_PITCH)).toMatchObject({ parent: 'project-1', position: 2 });
+    });
+
+    it('in a gap of another project it becomes a sub-project of that project, at that place', () => {
+      expect(gapDrop(sub, x('project-21') + 1, ROW_PITCH)).toMatchObject({ parent: 'project-2', position: 1 });
+      expect(gapDrop(sub, x('project-22') + 1, ROW_PITCH)).toMatchObject({ parent: 'project-2', position: 2 });
+      expect(gapDrop(sub, x('project-111') + 1, 2 * ROW_PITCH)).toMatchObject({ parent: 'project-11', position: 1 });
+      // A top-level project into the gap between two sub-projects.
+      const top = dropRows('project-3', nodes, placed, true);
+      expect(gapDrop(top, x('project-12') + 1, ROW_PITCH)).toMatchObject({ parent: 'project-1', position: 2 });
+    });
+
+    it('between two rows the nearer end wins; its own row wins a tie and takes whatever is beyond reach', () => {
+      const end = x('project-13') + W / 2; // right end of its own row
+      const start = x('project-21') - W / 2; // left end of the next project's row
+      expect(gapDrop(sub, end + 1, ROW_PITCH)).toMatchObject({ parent: 'project-1' });
+      expect(gapDrop(sub, start - 1, ROW_PITCH)).toMatchObject({ parent: 'project-2', position: 0 });
+      // Far right of everything: beyond the reach of project-2's row, so it is its own row's end.
+      expect(gapDrop(sub, x('project-22') + W / 2 + GAP_X + W + 1, ROW_PITCH)).toMatchObject({ parent: 'project-1', position: 2 });
+      expect(gapDrop(sub, x('project-22') + W / 2 + GAP_X + W - 1, ROW_PITCH)).toMatchObject({ parent: 'project-2', position: 2 });
+    });
+
+    it('a row of another parent is only reached close to it; level with no row there is no drop', () => {
+      const top = dropRows('project-3', nodes, placed, true);
+      expect(gapDrop(top, x('project-22') + W / 2 + GAP_X + W + 1, ROW_PITCH)).toBeNull();
+      expect(gapDrop(top, x('project-11') - W / 2 - GAP_X - W - 1, ROW_PITCH)).toBeNull();
+      expect(gapDrop(sub, x('project-1'), 3 * ROW_PITCH)).toBeNull();
+      expect(gapDrop(sub, x('project-1'), -ROW_PITCH)).toBeNull();
+      expect(gapDrop(sub, Number.NaN, 0)).toBeNull();
+      expect(gapDrop([], 0, 0)).toBeNull();
+    });
+  });
+});
+
+describe('a drop in a gap reaches the document', () => {
   const record = (): AutosaveRecord => ({ doc: smallDocument(), dirty: false, fileName: null, handle: null, savedAt: null });
   const OUTCOME = 'More people plan a full week of meals';
 
@@ -186,11 +334,11 @@ describe('a drag reorder reaches the document', () => {
 
     const key = (title: string) => tree.nodes.find(n => n.title === title)!.id;
     const x = (title: string) => tree.placed[key(title)].x;
-    /** What the canvas does on a drop: decide, and write only when the order changes. */
+    /** What the canvas does on a drop: decide, and write only when something changes. */
     const drop = async (title: string, centreX: number, dy = 0) => {
-      const row = siblingRow(key(title), tree.nodes, tree.placed);
-      const place = row && reorderDrop(row, centreX, dy);
-      return place ? tree.moveNode(key(title), tree.byId(key(title))!.parent, place.position) : null;
+      const rows = dropRows(key(title), tree.nodes, tree.placed, ui.projectId === 'all');
+      const place = gapDrop(rows, centreX, tree.placed[key(title)].y + dy);
+      return place ? tree.moveNode(key(title), place.parent, place.position) : null;
     };
     const top = () => tree.roots.map(n => n.title);
     const subs = () => tree.nodes.filter(n => n.parent === 'project-1' && n.type === 'project').map(n => n.title);
@@ -203,11 +351,122 @@ describe('a drag reorder reaches the document', () => {
     return { ...ctx, key, x, drop, top, subs, stored };
   }
 
+  it('a sub-project dropped level with the top-level projects becomes one, at the place shown', async () => {
+    const { doc, tree, drop, x, top, subs, stored, key } = await setup();
+    expect(await drop('Sub B', x('Second') - 1, -ROW_PITCH)).toBe(true);
+    expect(top()).toEqual(['Meal-planning app', 'Sub B', 'Second', 'Third']);
+    expect(subs()).toEqual(['Sub A', 'Sub C']);
+    expect(tree.byId(key('Sub B'))!.parent).toBeNull();
+    expect(stored(null)).toEqual(['Meal-planning app', 'Sub B', 'Second', 'Third']);
+    expect(stored(1)).toEqual(['Sub A', 'Sub C']);
+    expect(doc.dirty).toBe(true);
+
+    // First and last place too.
+    expect(await drop('Sub A', x('Meal-planning app') - 2000, -ROW_PITCH)).toBe(true);
+    expect(await drop('Sub C', x('Third') + 1, -ROW_PITCH)).toBe(true);
+    expect(stored(null)).toEqual(['Sub A', 'Meal-planning app', 'Sub B', 'Second', 'Third', 'Sub C']);
+    expect(stored(1)).toEqual([]);
+
+    // One undo per drop puts each of them back where it was.
+    for (let i = 0; i < 3; i++) expect(await doc.undo()).toBe(true);
+    expect(stored(null)).toEqual(['Meal-planning app', 'Second', 'Third']);
+    expect(stored(1)).toEqual(['Sub A', 'Sub B', 'Sub C']);
+    expect(doc.dirty).toBe(false);
+  });
+
+  it('a project dropped between two sub-projects of another project becomes their sibling', async () => {
+    const { drop, x, top, subs, stored } = await setup();
+    expect(await drop('Third', x('Sub B') - 1, ROW_PITCH)).toBe(true);
+    expect(top()).toEqual(['Meal-planning app', 'Second']);
+    expect(subs()).toEqual(['Sub A', 'Third', 'Sub B', 'Sub C']);
+    expect(stored(1)).toEqual(['Sub A', 'Third', 'Sub B', 'Sub C']);
+  });
+
+  it('a project never lands in a row of its own sub-projects, and a drop level with nothing writes nothing', async () => {
+    const { doc, drop, x, top } = await setup();
+    expect(await drop('Meal-planning app', x('Sub B') - 1, ROW_PITCH)).toBeNull();
+    expect(await drop('Sub B', x('Sub B'), 2 * ROW_PITCH)).toBeNull();
+    expect(top()).toEqual(['Meal-planning app', 'Second', 'Third']);
+    expect(doc.dirty).toBe(false);
+  });
+
+  it('with the picker on one project there is no top row to drop on: the sub-project stays where it is', async () => {
+    const { doc, ui, drop, x, subs, stored } = await setup();
+    ui.setProject('project-1');
+    expect(await drop('Sub B', x('Meal-planning app') + 300, -ROW_PITCH)).toBeNull();
+    expect(await drop('Sub B', x('Meal-planning app') - 300, -ROW_PITCH)).toBeNull();
+    expect(subs()).toEqual(['Sub A', 'Sub B', 'Sub C']);
+    expect(stored(null)).toEqual(['Meal-planning app', 'Second', 'Third']);
+    expect(doc.dirty).toBe(false);
+  });
+
+  it('the depth limit still applies to a drop in a gap, with its message', async () => {
+    const { tree, key, stored } = await setup();
+    // A chain of sub-projects under Second, down to the deepest level a tree may have.
+    let parent = key('Second');
+    for (let level = 2; level <= MAX_DEPTH; level++) parent = (await tree.createNode(parent, 'project', `Level ${level}`))!;
+    const sibling = (await tree.createNode(tree.byId(parent)!.parent!, 'project', 'Deep sibling'))!;
+    expect(tree.byId(sibling)).toBeDefined();
+    // "Meal-planning app" has sub-projects: next to the deepest pair it would pass the limit.
+    const row = tree.placed[sibling];
+    const rows = dropRows('project-1', tree.nodes, tree.placed, true);
+    const place = gapDrop(rows, row.x + 1, row.y)!;
+    expect(place.parent).toBe(tree.byId(sibling)!.parent);
+    expect(await tree.moveNode('project-1', place.parent, place.position)).toBe(false);
+    expect(tree.error).toBe(`A tree can be at most ${MAX_DEPTH} levels deep.`);
+    expect(stored(null)).toEqual(['Meal-planning app', 'Second', 'Third']);
+  });
+
+  describe('moving out one level (Alt+Up)', () => {
+    it('a sub-project lands at the top level, straight after the project it was in', async () => {
+      const { doc, tree, key, top, subs, stored } = await setup();
+      expect(await tree.outdentNode(key('Sub B'))).toBe(true);
+      expect(top()).toEqual(['Meal-planning app', 'Sub B', 'Second', 'Third']);
+      expect(subs()).toEqual(['Sub A', 'Sub C']);
+      expect(stored(null)).toEqual(['Meal-planning app', 'Sub B', 'Second', 'Third']);
+      expect(doc.undoLabel).toBe('move “Sub B”');
+    });
+
+    it('a project two levels down moves out one level at a time', async () => {
+      const { tree, key, top, subs } = await setup();
+      const deep = (await tree.createNode(key('Sub B'), 'project', 'Deep'))!;
+      expect(await tree.outdentNode(deep)).toBe(true);
+      expect(subs()).toEqual(['Sub A', 'Sub B', 'Deep', 'Sub C']);
+      expect(await tree.outdentNode(deep)).toBe(true);
+      expect(top()).toEqual(['Meal-planning app', 'Deep', 'Second', 'Third']);
+    });
+
+    it('there is no level to move out to for a top-level project, or where the level above cannot hold the node', async () => {
+      const { doc, tree } = await setup();
+      expect(await tree.outdentNode('project-1')).toBe(false);
+      expect(await tree.outdentNode('outcome-2')).toBe(false); // an outcome of a top-level project
+      expect(await tree.outdentNode('solution-6')).toBe(false); // an outcome holds no solutions
+      expect(await tree.outdentNode('nothing-9')).toBe(false);
+      expect(tree.error).toBeNull();
+      expect(doc.dirty).toBe(false);
+    });
+
+    it('works for the other types that nest: an opportunity moves out from under an opportunity', async () => {
+      const { tree } = await setup();
+      const opportunities = () => tree.nodes.filter(n => n.parent === 'outcome-2' && n.type === 'opportunity').map(n => n.id);
+      expect(tree.byId('opportunity-5')!.parent).toBe('opportunity-3');
+      expect(await tree.outdentNode('opportunity-5')).toBe(true);
+      expect(opportunities()).toEqual(['opportunity-3', 'opportunity-5', 'opportunity-11', 'opportunity-14']);
+    });
+
+    it('a sub-project moved out of the focused project switches the picker to every project', async () => {
+      const { tree, ui, key } = await setup();
+      ui.setProject('project-1');
+      expect(await tree.outdentNode(key('Sub B'))).toBe(true);
+      expect(ui.projectId).toBe('all');
+    });
+  });
+
   it('a drop that changes nothing writes nothing: the document stays clean', async () => {
     const { doc, drop, x, top } = await setup();
     expect(await drop('Second', x('Second') + 40)).toBeNull();
     expect(await drop('Meal-planning app', x('Meal-planning app') - 900)).toBeNull();
-    expect(await drop('Third', x('Meal-planning app') - 1, ROW_PITCH)).toBeNull(); // not level
+    expect(await drop('Third', x('Meal-planning app') - 1, -ROW_PITCH)).toBeNull(); // level with no row of projects
     expect(top()).toEqual(['Meal-planning app', 'Second', 'Third']);
     expect(doc.dirty).toBe(false);
   });

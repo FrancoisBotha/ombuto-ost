@@ -99,7 +99,7 @@ const tools = CREATABLE_TYPES.map(type => ({ type, label: TYPE_BOX[type].label, 
 const footer = computed(() =>
   ui.tool
     ? `Click a highlighted node to attach the new ${TYPE_BOX[ui.tool].label.toLowerCase()}.`
-    : 'Drag a type onto the node it belongs under — or click to arm it, then click a node. Drag a node onto another to re-parent, or sideways past a sibling to reorder; double-click to rename.',
+    : 'Drag a type onto the node it belongs under — or click to arm it, then click a node. Drag a node onto another to re-parent, or into a gap to place it there; double-click to rename. Ctrl/Cmd+Z undoes.',
 );
 
 // ---- drag ------------------------------------------------------------------------------------------

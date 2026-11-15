@@ -22,12 +22,26 @@
     >
       <span class="ost-swatch" :class="`ost-swatch--${option.type}`" aria-hidden="true"></span>{{ option.label }}
     </button>
+    <template v-if="canMoveTop">
+      <i class="ost-add-menu__rule" role="separator"></i>
+      <button
+        type="button"
+        role="menuitem"
+        class="ost-add-menu__item"
+        title="Take this project out of its parent project: it becomes a top-level project"
+        data-cy="ost-add-menu-move-top"
+        @click="emit('moveTop')"
+      >
+        <PhArrowLineUp :size="12" class="ost-add-menu__icon" aria-hidden="true" />Move to top level
+      </button>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 /**
- * The node `+` menu: exactly the node's valid child types.
+ * The node `+` menu: exactly the node's valid child types. On a sub-project it also offers "Move to
+ * top level", below a rule: the way back out of a nest without opening the detail panel.
  * Keyboard: focus lands on the first item, ↑/↓/Home/End move, Enter/Space choose, Escape or Tab
  * closes (focus goes back to the `+`). A pointer press anywhere outside the menu and its `+` closes it.
  * Unmounted while open (its node left the canvas), it reports close so no stale addMenuId remains;
@@ -35,13 +49,21 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
+import { PhArrowLineUp } from '@phosphor-icons/vue';
+
 import { TYPE_BOX } from '../domain/rules';
 import type { NodeType } from '../domain/types';
 
 import { childTypesFor } from './edit-rules';
 
-const props = defineProps<{ parentType: NodeType; parentTitle: string; trigger?: HTMLElement | null }>();
-const emit = defineEmits<{ choose: [type: NodeType]; close: [refocus: boolean] }>();
+const props = defineProps<{
+  parentType: NodeType;
+  parentTitle: string;
+  trigger?: HTMLElement | null;
+  /** The node is a sub-project: offer to move it to the top level. */
+  canMoveTop?: boolean;
+}>();
+const emit = defineEmits<{ choose: [type: NodeType]; moveTop: []; close: [refocus: boolean] }>();
 
 const root = ref<HTMLElement | null>(null);
 const options = computed(() => childTypesFor(props.parentType).map(type => ({ type, label: TYPE_BOX[type].label })));
@@ -130,6 +152,21 @@ onBeforeUnmount(() => {
 .ost-add-menu__item:hover,
 .ost-add-menu__item:focus-visible {
   background: var(--color-accent-900);
+}
+
+.ost-add-menu__item {
+  white-space: nowrap;
+}
+.ost-add-menu__icon {
+  flex: none;
+  width: 10px;
+  color: var(--color-accent-300);
+}
+.ost-add-menu__rule {
+  display: block;
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--color-divider);
 }
 
 .ost-swatch {

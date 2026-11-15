@@ -198,6 +198,18 @@ export const useOstTreeStore = defineStore('ostTree', () => {
     loaded.value = true;
   }
 
+  /**
+   * Puts another state of the SAME document on screen (after an undo or redo): the nodes are
+   * replaced, the view is kept. Keys are stable, so the selection, the collapsed branches and the
+   * focused project carry on; whatever pointed at a node that is gone is cleared. Cannot fail.
+   */
+  function replace(ordered: OstNode[]) {
+    const kept = new Set(ordered.map(n => n.id));
+    const gone = new Set(nodes.value.filter(n => !kept.has(n.id)).map(n => n.id));
+    nodes.value = ordered;
+    if (gone.size) useOstUiStore().forgetNodes(gone);
+  }
+
   /** Reads the open document's tree and shows it (see `install`). False, with a message, when it cannot. */
   async function loadTree(options: { keepCollapsed?: boolean } = {}): Promise<boolean> {
     let ordered: OstNode[];
@@ -373,6 +385,25 @@ export const useOstTreeStore = defineStore('ostTree', () => {
     return moveNode(key, node.parent, next);
   }
 
+  /**
+   * Moves a node out one level: from under its parent to under its parent's parent, placed straight
+   * after the parent it left when the two are the same type (a sub-project lands next to the
+   * project it was in; at the first level of nesting that is the top level). The keyboard way out of
+   * a nest (Alt+Up). False, without a message, when there is no level to move out to.
+   */
+  async function outdentNode(key: string): Promise<boolean> {
+    const node = byId(key);
+    const parent = byId(node?.parent);
+    if (!node || !parent) return false;
+    const target = byId(parent.parent);
+    if (target ? !ALLOWED[target.type].includes(node.type) : node.type !== 'project') return false;
+    if (parent.type !== node.type) return moveNode(key, target?.id ?? null);
+    const before = siblingsOf(parent, parent.parent).filter(
+      n => n.sortOrder < parent.sortOrder || (n.sortOrder === parent.sortOrder && n.dbId < parent.dbId),
+    ).length;
+    return moveNode(key, target?.id ?? null, before + 1);
+  }
+
   /** Deletes a node and its subtree. */
   async function deleteNode(key: string): Promise<boolean> {
     const node = byId(key);
@@ -497,12 +528,14 @@ export const useOstTreeStore = defineStore('ostTree', () => {
     reset,
     prepare,
     install,
+    replace,
     loadTree,
     patchNode,
     createNode,
     createProject,
     moveNode,
     reorderNode,
+    outdentNode,
     deleteNode,
     addLink,
     updateLink,

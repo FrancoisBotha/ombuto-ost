@@ -37,6 +37,57 @@ describe('CanvasToolbar', () => {
     w.unmount();
   });
 
+  describe('undo and redo', () => {
+    it('are disabled, and say so, when there is nothing to undo or redo', () => {
+      const w = mountToolbar();
+      const undo = w.get('[data-cy="ost-undo"]');
+      const redo = w.get('[data-cy="ost-redo"]');
+      expect(undo.attributes('disabled')).toBeDefined();
+      expect(redo.attributes('disabled')).toBeDefined();
+      expect(undo.attributes('aria-label')).toBe('Nothing to undo');
+      expect(redo.attributes('aria-label')).toBe('Nothing to redo');
+      expect(undo.attributes('title')).toMatch(/^Nothing to undo \((Ctrl\+Z|⌘Z)\)$/);
+      w.unmount();
+    });
+
+    it('name the step they would undo / redo, with the shortcut in the tooltip, and ask the page to do it', async () => {
+      const w = mount(CanvasToolbar, {
+        props: { zoom: 1, undoLabel: 'delete “Weekly planner”', redoLabel: null },
+        attachTo: document.body,
+      });
+      const undo = w.get('[data-cy="ost-undo"]');
+      const redo = w.get('[data-cy="ost-redo"]');
+      expect(undo.attributes('disabled')).toBeUndefined();
+      expect(redo.attributes('disabled')).toBeDefined();
+      expect(undo.attributes('aria-label')).toBe('Undo delete “Weekly planner”');
+      expect(undo.attributes('title')).toMatch(/^Undo delete “Weekly planner” \((Ctrl\+Z|⌘Z)\)$/);
+      await undo.trigger('click');
+      expect(w.emitted('undo')).toHaveLength(1);
+
+      await w.setProps({ undoLabel: null, redoLabel: 'delete “Weekly planner”' });
+      expect(undo.attributes('disabled')).toBeDefined();
+      expect(redo.attributes('disabled')).toBeUndefined();
+      expect(redo.attributes('aria-label')).toBe('Redo delete “Weekly planner”');
+      expect(redo.attributes('title')).toMatch(/^Redo delete “Weekly planner” \((Ctrl\+Y|⇧⌘Z)\)$/);
+      await redo.trigger('click');
+      expect(w.emitted('redo')).toHaveLength(1);
+      w.unmount();
+    });
+
+    it('are buttons of the app (44px on a touch screen) in a named group, with the icon hidden from assistive tech', () => {
+      const w = mountToolbar();
+      const group = w.get('[role="group"][aria-label="Undo and redo"]');
+      const buttons = group.findAll('button');
+      expect(buttons.map(b => b.attributes('data-cy'))).toEqual(['ost-undo', 'ost-redo']);
+      for (const b of buttons) {
+        expect(b.classes()).toContain('ost-btn');
+        expect(b.attributes('type')).toBe('button');
+        expect(b.find('svg').attributes('aria-hidden')).toBe('true');
+      }
+      w.unmount();
+    });
+  });
+
   it('counts on the type chips describe the project on the canvas, not the whole tree', async () => {
     // The chips dim what is laid out, so their numbers have to agree with what is on screen.
     // Counting every node in the tree would leave a canvas scoped to one project reporting the

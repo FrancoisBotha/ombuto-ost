@@ -22,7 +22,7 @@ const ITEMS = (['outcome', 'opportunity', 'solution', 'assumption', 'evidence'] 
  * keyboard way to every other node, so the hint names it.
  */
 const HINT =
-  'Drag a node onto another to re-parent, or sideways past a sibling to reorder · Alt+←/→ reorders · double-click a title to rename · search + Enter jumps to a node';
+  'Drag a node onto another to re-parent, or into a gap to place it there (a sub-project beside the top-level projects moves to the top) · Alt+←/→ reorders, Alt+↑ moves out a level · Ctrl/Cmd+Z undoes · double-click a title to rename · search + Enter jumps to a node';
 </script>
 
 <style scoped>

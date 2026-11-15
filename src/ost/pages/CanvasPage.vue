@@ -2,6 +2,10 @@
   <section class="ost-canvas-page" data-cy="ostCanvasPage">
     <CanvasToolbar
       :zoom="zoom"
+      :undo-label="doc.undoLabel"
+      :redo-label="doc.redoLabel"
+      @undo="doc.undo()"
+      @redo="doc.redo()"
       @project="chooseProject"
       @add-project="canvas?.addProject()"
       @zoom-in="canvas?.zoomIn()"
@@ -19,7 +23,7 @@
 
 <script setup lang="ts">
 /**
- * The tree canvas page: toolbar (project focus, search, filters, zoom), node palette (left), the
+ * The tree canvas page: toolbar (project focus, undo / redo, search, filters, zoom), node palette (left), the
  * canvas and the detail panel (right) of the selected node.
  *
  * With focus on the page (not in a field), Delete asks to delete the selected node. When the page
@@ -27,6 +31,8 @@
  * outlives the canvas.
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+
+import { useDocumentStore } from '@/doc/document.store';
 
 import CanvasToolbar from '../canvas/CanvasToolbar.vue';
 import NodePalette from '../canvas/NodePalette.vue';
@@ -36,6 +42,7 @@ import DetailPanel from '../panel/DetailPanel.vue';
 import { useOstTreeStore } from '../stores/ost-tree.store';
 import { useOstUiStore } from '../stores/ost-ui.store';
 
+const doc = useDocumentStore();
 const tree = useOstTreeStore();
 const ui = useOstUiStore();
 

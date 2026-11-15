@@ -36,7 +36,9 @@
       :parent-type="node.type"
       :parent-title="node.title"
       :trigger="addButton"
+      :can-move-top="canMoveTop"
       @choose="emit('addChoose', $event)"
+      @move-top="emit('moveTop')"
       @close="onMenuClose"
     />
     <button
@@ -45,8 +47,8 @@
       type="button"
       class="ost-node__add ost-hit nodrag nopan"
       :class="{ 'is-open': addMenuOpen }"
-      title="Add child"
-      :aria-label="`Add a child under ${node.title}`"
+      :title="canMoveTop ? 'Add child, or move to top level' : 'Add child'"
+      :aria-label="canMoveTop ? `Add a child under ${node.title}, or move it to the top level` : `Add a child under ${node.title}`"
       aria-haspopup="menu"
       :aria-expanded="addMenuOpen"
       :data-cy="`ost-node-add-${node.id}`"
@@ -117,7 +119,7 @@
  * and legal drop targets carry `is-target` / `data-drop-target` (the one under the pointer also
  * `is-drop`). The node itself is focusable: Enter/Space activates (select, or attach the armed
  * palette type), F2 renames, Delete asks to delete, Alt+Left / Alt+Right moves it among its
- * siblings — the canvas decides what is allowed.
+ * siblings, Alt+Up moves it out one level — the canvas decides what is allowed.
  */
 import { computed, ref } from 'vue';
 
@@ -181,15 +183,21 @@ const emit = defineEmits<{
   delete: [];
   /** one place earlier (-1) or later (+1) among the node's siblings */
   reorder: [step: -1 | 1];
+  /** out one level: from under its parent to under its parent's parent */
+  outdent: [];
+  /** a sub-project, to the top level (the + menu) */
+  moveTop: [];
 }>();
 
-const SHORTCUTS = 'Enter F2 Delete Alt+ArrowLeft Alt+ArrowRight';
+const SHORTCUTS = 'Enter F2 Delete Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp';
 
 const root = ref<HTMLElement | null>(null);
 const addButton = ref<HTMLButtonElement | null>(null);
 
 const box = computed(() => TYPE_BOX[props.node.type]);
 const isOpportunity = computed(() => props.node.type === 'opportunity');
+/** A sub-project: its + menu also offers the way back to the top level. */
+const canMoveTop = computed(() => props.node.type === 'project' && props.node.parent !== null);
 const tone = computed(() => statusTone(props.node.status));
 const value = computed(() => Math.min(5, Math.max(0, Math.round(props.node.value || 0))));
 
@@ -204,6 +212,7 @@ const accessibleName = computed(() =>
 function onKeydown(event: KeyboardEvent) {
   if (event.target !== root.value) return;
   if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) emit('reorder', event.key === 'ArrowLeft' ? -1 : 1);
+  else if (event.altKey && event.key === 'ArrowUp') emit('outdent');
   else if (event.altKey || event.ctrlKey || event.metaKey) return;
   else if (event.key === 'Enter' || event.key === ' ') emit('activate');
   else if (event.key === 'F2') emit('rename');

@@ -88,8 +88,9 @@
 <script setup lang="ts">
 /**
  * Right-hand detail panel (346px): type kicker, clickable ancestor breadcrumb, editable title,
- * hide button; tabs by type (PanelTabs); Delete, and for a sub-project "Move to top level" (dragging
- * can only nest a project deeper or elsewhere, never back to the top). Hiding keeps the selection and leaves a
+ * hide button; tabs by type (PanelTabs); Delete, and for a sub-project "Move to top level" (also in
+ * the node's + menu; on the canvas, drop it level with the top-level projects or press Alt+Up — when
+ * the picker shows a single project the top row is not on screen and this is the way). Hiding keeps the selection and leaves a
  * "Details" tab on the canvas edge; a node click reopens it too (ui.select).
  */
 import { computed, nextTick, ref, watch } from 'vue';

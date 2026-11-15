@@ -30,6 +30,7 @@ const MESSAGES = {
   toomanylinks: `A node can have at most ${MAX_LINKS_PER_NODE} links.`,
   toomanyquestions: `An opportunity can have at most ${MAX_QUESTIONS_PER_NODE} open questions.`,
   documenttoolarge: 'This tree holds as much text as one file can. Shorten some notes, or start another tree.',
+  historybroken: 'That step could not be put back. The tree is unchanged.',
 } as const;
 
 export type RuleKey = keyof typeof MESSAGES;
