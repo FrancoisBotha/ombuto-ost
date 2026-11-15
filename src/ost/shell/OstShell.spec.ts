@@ -316,7 +316,7 @@ describe('OstShell', () => {
       await flushPromises();
       const toast = w.get('[data-cy="ostError"]');
       expect(toast.attributes('role')).toBe('alert');
-      expect(toast.text()).toContain('This file is not an Ombuto OST tree.');
+      expect(toast.text()).toContain('This file is not a Pebble OST tree.');
       await w.get('[data-cy="ostErrorDismiss"]').trigger('click');
       expect(w.find('[data-cy="ostError"]').exists()).toBe(false);
     });

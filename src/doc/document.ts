@@ -102,7 +102,7 @@ export interface OstDocument {
   nodes: DocNode[];
 }
 
-/** A file that is not a valid Ombuto OST document. The message is written for the person opening it. */
+/** A file that is not a valid Pebble OST document. The message is written for the person opening it. */
 export class DocumentFormatError extends Error {
   constructor(message: string) {
     super(message);
@@ -213,7 +213,7 @@ export function fileNameFor(name: string): string {
 
 // ---- reading (strict) -----------------------------------------------------------------------------
 
-const NOT_OST = 'This file is not an Ombuto OST tree.';
+const NOT_OST = 'This file is not a Pebble OST tree.';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -360,7 +360,7 @@ export function validateDocument(value: unknown): OstDocument {
   if (!isRecord(value) || value.format !== DOCUMENT_FORMAT) throw new DocumentFormatError(NOT_OST);
   if (typeof value.version !== 'number' || !Number.isInteger(value.version) || value.version < 1) throw new DocumentFormatError(NOT_OST);
   if (value.version > DOCUMENT_VERSION) {
-    throw new DocumentFormatError('This file was saved by a newer version of Ombuto OST. Update the app to open it.');
+    throw new DocumentFormatError('This file was saved by a newer version of Pebble OST. Update the app to open it.');
   }
   if (typeof value.name !== 'string') fail('the tree', 'has no name');
   if (!Array.isArray(value.nodes)) fail('the tree', 'has no list of nodes');
@@ -404,7 +404,7 @@ export function validateDocument(value: unknown): OstDocument {
 
   let weight = 0;
   for (const n of nodes) weight += nodeWeight(n);
-  if (weight > MAX_NODES_WEIGHT) fail('the tree', 'holds more text than an Ombuto OST file can');
+  if (weight > MAX_NODES_WEIGHT) fail('the tree', 'holds more text than a Pebble OST file can');
 
   return { format: DOCUMENT_FORMAT, version: DOCUMENT_VERSION, name: cleanDocumentName(value.name), nodes };
 }

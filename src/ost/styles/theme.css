@@ -1,5 +1,5 @@
 /*
- * Ombuto OST — the single source of the palette ("Nocturne").
+ * Pebble OST — the single source of the palette ("Nocturne").
  *
  * The four core colours, the two ramps and the node tints. A ramp step is a pigment, not a role: the roles the
  * components use (`--color-surface`, `--color-accent-600`, …) are assigned in ost-tokens.css.

@@ -103,7 +103,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
         () => fileText([node(1, 'project', null), ...Array.from({ length: MAX_NODES }, (_, i) => node(i + 2, 'outcome', 1))]),
         /more than/,
       ],
-      ['not a tree at all', () => '{"hello":"world"}', /not an Ombuto OST tree/],
+      ['not a tree at all', () => '{"hello":"world"}', /not a Pebble OST tree/],
     ])('%s: a clear message, the tree and its autosave as they were', async (_label, text, message) => {
       await openWork();
       await doc.resolvePending('cancel');

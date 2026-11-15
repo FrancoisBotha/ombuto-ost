@@ -30,7 +30,7 @@ const visible = computed(() => watcher?.updateReady.value === true && !dismissed
 const heldBack = ref(false);
 
 const message = computed(() => {
-  if (!doc.hasDocument) return 'A new version of Ombuto OST is ready.';
+  if (!doc.hasDocument) return 'A new version of Pebble OST is ready.';
   // With autosave off, a reload would lose whatever is not in a file yet.
   if (doc.autosaveFailed || heldBack.value) return 'A new version is ready. Save your tree to a file before you reload.';
   return 'A new version is ready. Your tree is kept in this browser and comes back after the reload.';
