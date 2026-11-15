@@ -85,3 +85,9 @@ npm run build    # vue-tsc type-check, Vite build, and the privacy check of dist
 Anything that touches the service worker, the Content Security Policy or file access should also be
 tried in a real browser against the built app (`npm run build && npm run preview`): load, edit,
 save, reload, then again with the network off, watching the console for policy violations.
+
+## Deployment
+
+A push to `main` publishes the app to <https://ost.francoisbotha.io/> (Cloudflare Pages) and to a
+GitHub Pages mirror. `docs/DEPLOYMENT.md` has the pipeline, the one-off setup, manual deploys and
+what to do when a deploy fails. Read it before touching `.github/workflows/deploy.yml`.

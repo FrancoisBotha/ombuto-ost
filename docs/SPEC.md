@@ -56,7 +56,7 @@ These are hard requirements, not nice-to-haves:
 - A strict Content Security Policy `<meta>` in `index.html`: `default-src 'self'`,
   `connect-src 'self'`, no remote origins anywhere. Allow only what the app truly needs
   (`style-src 'self' 'unsafe-inline'` because Vue Flow sets inline styles; `img-src 'self' data:
-  blob:` for export; `worker-src 'self'`).
+blob:` for export; `worker-src 'self'`).
 - UI wording never says "upload". Use "Open file" and "Save to your computer".
 - A permanent, small "Stored on this device only" indicator that opens a plain-language
   explanation: what is stored, what is sent (nothing), and how to check (go offline, or watch
@@ -67,9 +67,9 @@ These are hard requirements, not nice-to-haves:
 
 - Vite + Vue 3 + TypeScript + Pinia + `@vue-flow/core` **pinned at exactly 1.48.2** (the
   canvas's `pinRendered` relies on internal behaviour of that version) + `@phosphor-icons/vue`
-  + `@fontsource/inter`. No Bootstrap, no bootstrap-vue-next, no FontAwesome, no rxjs/stomp/
-  sockjs, no axios, no js-cookie, no dayjs unless truly needed. Keep dependencies minimal and
-  pin exact versions matching the enterprise app's `package.json` where the package is shared.
+  - `@fontsource/inter`. No Bootstrap, no bootstrap-vue-next, no FontAwesome, no rxjs/stomp/
+    sockjs, no axios, no js-cookie, no dayjs unless truly needed. Keep dependencies minimal and
+    pin exact versions matching the enterprise app's `package.json` where the package is shared.
 - Source layout: `src/` with alias `@` -> `src`. The ported module stays at `src/ost/` with
   its sub-folders (`domain/`, `canvas/`, `panel/`, `overlays/`, `stores/`, `styles/`, `pages/`,
   `shell/`) so the code remains comparable with the enterprise app.
