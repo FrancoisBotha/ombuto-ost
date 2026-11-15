@@ -12,7 +12,7 @@ It is a port of the tree editor from the enterprise app at
 ## Product decisions (made by the owner)
 
 - Static web app, installable as an offline PWA. Hosted on GitHub Pages first
-  (`https://francoisbotha.github.io/ombuto-ost/`), later on a personal site. It must work from
+  (`https://francoisbotha.github.io/ombuto-ost/`) and on Cloudflare Pages (`https://ost.francoisbotha.io/`). It must work from
   any sub-path: Vite `base: './'` and **hash-mode** router (or no router at all).
 - **One file = one tree.** A `.ost` file is one document holding one tree, which may contain
   several projects, and projects inside projects. No dashboard, no library of trees. New / Open / Save / Save as, plus

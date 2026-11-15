@@ -3,7 +3,7 @@
 A small, local-first editor for Opportunity Solution Trees. It runs entirely in your browser:
 there is no backend, no account and nothing to install. A tree is a file on your own computer.
 
-Use it at <https://francoisbotha.github.io/ombuto-ost/>, or host the static files yourself.
+Use it at <https://ost.francoisbotha.io/>, or host the static files yourself.
 
 An Opportunity Solution Tree maps a product outcome to the customer opportunities behind it, the
 solutions that could address them, and the assumptions each solution rests on. The term and the
