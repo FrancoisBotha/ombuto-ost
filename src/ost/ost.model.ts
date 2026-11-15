@@ -4,7 +4,7 @@
  * node key ("opportunity-12") that names a node everywhere in the UI.
  */
 
-export type ApiNodeType = 'PRODUCT' | 'OUTCOME' | 'OPPORTUNITY' | 'SOLUTION' | 'ASSUMPTION' | 'EVIDENCE';
+export type ApiNodeType = 'PROJECT' | 'OUTCOME' | 'OPPORTUNITY' | 'SOLUTION' | 'ASSUMPTION' | 'EVIDENCE';
 
 export interface NodeLinkDTO {
   id: number;
@@ -37,7 +37,7 @@ export interface TreeNodeDTO {
   questions: OpenQuestionDTO[] | null;
 }
 
-/** `parentType` / `parentId` are null only for a product (the top of a branch). */
+/** `parentType` / `parentId` are null only for a project (the top of a branch). */
 export interface CreateNodeRequest {
   type: ApiNodeType;
   parentType: ApiNodeType | null;

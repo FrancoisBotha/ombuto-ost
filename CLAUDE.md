@@ -39,6 +39,16 @@ loading the app's own static files.
   (`parseDocument` / `validateDocument`) and serialising. Change the format there and nowhere else,
   and keep opening strict: file content is never rendered as HTML, and only `http:`, `https:` and
   `mailto:` links are clickable.
+- **The top node type is `project`, and projects nest** (a project sits at the top or under another
+  project, and holds outcomes and projects). The first published build called it `product`: files
+  and browser working copies from it are mapped on the way in, in `src/doc/legacy.ts` and nowhere
+  else. Do not write `product` as a node type anywhere, and do not remove that mapping.
+  - The parent -> child matrix is `ALLOWED` in `src/ost/domain/rules.ts`; the document service and
+    `validateDocument` both enforce it, together with "no project under its own descendant".
+  - Nothing may assume that a project is a root or that the canvas shows whole top-level trees:
+    the project picker can focus any project. Ask the tree store (`roots`, `inScope`).
+  - Specs that name nodes by id use `src/doc/small-document.test-util.ts`, not the built-in
+    example (`src/doc/sample.ts`), so the example can change freely.
 - All tree edits go through the local document service (`src/doc/local-document-service.ts`),
   which the tree store (`src/ost/stores/ost-tree.store.ts`) calls. The document store
   (`src/doc/document.store.ts`) owns New / Open / Save and autosave to IndexedDB.

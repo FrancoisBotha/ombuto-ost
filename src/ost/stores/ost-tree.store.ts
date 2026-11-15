@@ -59,12 +59,16 @@ export const useOstTreeStore = defineStore('ostTree', () => {
   // ---- getters -----------------------------------------------------------------------------------
   const index = computed(() => new Map(nodes.value.map(n => [n.id, n])));
   const byId = (key: string | null | undefined): OstNode | undefined => (key ? index.value.get(key) : undefined);
-  const products = computed(() => nodes.value.filter(n => n.type === 'product'));
+  /** Every project, nested ones included, in tree order (a project comes before its sub-projects). */
+  const projects = computed(() => nodes.value.filter(n => n.type === 'project'));
   const selected = computed(() => byId(useOstUiStore().selectedId));
-  /** Products in scope: all of them or the one chosen in the product combo. */
+  /**
+   * The tops of what the canvas shows: every top-level project, or the one project (top-level or
+   * nested) chosen in the project combo, which is then drawn as the top of its own subtree.
+   */
   const roots = computed(() => {
-    const ui = useOstUiStore();
-    return products.value.filter(p => ui.productId === 'all' || p.id === ui.productId);
+    const focus = useOstUiStore().projectId;
+    return projects.value.filter(p => (focus === 'all' ? p.parent === null : p.id === focus));
   });
   /**
    * Derived positions (tidy layout) — never stored, never user-set. Depends only on membership,
@@ -108,25 +112,28 @@ export const useOstTreeStore = defineStore('ostTree', () => {
   const descendantCount = (key: string) => descendantCounts.value.get(key) ?? 0;
   const ancestors = (key: string) => breadcrumb(key, index.value);
   /**
-   * The product every node hangs under, computed once per structural change (O(n)): the list is
-   * in tree order, so a node's parent is always seen before the node.
+   * Keys of the focused project and everything below it, computed once per structural change
+   * (O(n)): the list is in tree order, so a node's parent is always seen before the node. Null
+   * when every project is shown.
    */
-  const rootIds = computed(() => {
+  const scope = computed(() => {
+    const focus = useOstUiStore().projectId;
+    if (focus === 'all') return null;
     const list = nodes.value;
     for (const n of list) void n.parent;
-    const roots = new Map<string, string>();
-    for (const n of toRaw(list)) roots.set(n.id, (n.parent && roots.get(n.parent)) || n.id);
-    return roots;
+    const keys = new Set<string>();
+    for (const n of toRaw(list)) if (n.id === focus || (n.parent && keys.has(n.parent))) keys.add(n.id);
+    return keys;
   });
-  /** Key of the product `key` belongs to (itself for a product). */
-  const rootOf = (key: string): string => rootIds.value.get(key) ?? key;
+  /** Is `key` part of what the canvas shows: any node, or the focused project's subtree? */
+  const inScope = (key: string): boolean => scope.value?.has(key) ?? true;
 
   // ---- helpers -----------------------------------------------------------------------------------
   const fail = (err: unknown, fallback?: string, type?: NodeType) => {
     error.value = describeError(err, fallback, type);
   };
 
-  /** Same-type children of one parent (products: every product), in order. */
+  /** Same-type children of one parent (top-level projects: each other), in order. */
   const siblingsOf = (node: OstNode, parent: string | null) =>
     nodes.value
       .filter(n => n.parent === parent && n.type === node.type && n.id !== node.id)
@@ -168,7 +175,7 @@ export const useOstTreeStore = defineStore('ostTree', () => {
    */
   function prepare(dtos: TreeNodeDTO[]): OstNode[] {
     const ordered = orderTree(dtos.map(fromDto));
-    layoutTree(ordered, { roots: ordered.filter(n => n.type === 'product').map(n => n.id), collapsed: {} });
+    layoutTree(ordered, { roots: ordered.filter(n => n.parent === null).map(n => n.id), collapsed: {} });
     return ordered;
   }
 
@@ -264,27 +271,29 @@ export const useOstTreeStore = defineStore('ostTree', () => {
   }
 
   /**
-   * Creates a product (a new branch, placed last), selects it and puts it in rename mode. A canvas
-   * scoped to one product switches to the new one so it is on screen. Returns the new key, or null.
+   * Creates a top-level project (placed last), selects it and puts it in rename mode. A canvas
+   * focused on one project switches to the new one so it is on screen. Returns the new key, or
+   * null. A sub-project is an ordinary child: `createNode(parentKey, 'project')`.
    */
-  async function createProduct(title?: string): Promise<string | null> {
+  async function createProject(title?: string): Promise<string | null> {
     try {
-      const dto = await api().createNode({ type: 'PRODUCT', parentType: null, parentId: null, ...(title ? { title } : {}) });
+      const dto = await api().createNode({ type: 'PROJECT', parentType: null, parentId: null, ...(title ? { title } : {}) });
       const created = fromDto(dto);
       const ui = useOstUiStore();
-      if (ui.productId !== 'all') ui.setProduct(created.id);
+      if (ui.projectId !== 'all') ui.setProject(created.id);
       adopt(created);
       return created.id;
     } catch (err) {
-      fail(err, 'The product could not be created.', 'product');
+      fail(err, 'The project could not be created.', 'project');
       return null;
     }
   }
 
   /**
    * Re-parents `key` under `targetKey`, or reorders it among its siblings when `targetKey` is its
-   * current parent and a `position` is given (products: `targetKey` null). `position` is a
-   * zero-based index among the target's same-type children; omitted = last.
+   * current parent and a `position` is given. `targetKey` null is the top level, where only
+   * projects live: it reorders a top-level project and moves a sub-project out to the top.
+   * `position` is a zero-based index among the target's same-type children; omitted = last.
    */
   async function moveNode(key: string, targetKey: string | null, position?: number): Promise<boolean> {
     const node = byId(key);
@@ -292,7 +301,7 @@ export const useOstTreeStore = defineStore('ostTree', () => {
     if (!node || !parsed) return false;
     let target: OstNode | undefined;
     if (targetKey === null) {
-      if (node.type !== 'product') return false;
+      if (node.type !== 'project') return false;
     } else {
       target = byId(targetKey);
       if (!target) return false;
@@ -333,10 +342,10 @@ export const useOstTreeStore = defineStore('ostTree', () => {
         if (sib) sib.sortOrder = s.sortOrder;
       }
       nodes.value = orderTree(nodes.value);
-      if (target) {
-        const ui = useOstUiStore();
-        if (ui.collapsed[target.id]) ui.setCollapsed(target.id, false);
-      }
+      const ui = useOstUiStore();
+      if (target && ui.collapsed[target.id]) ui.setCollapsed(target.id, false);
+      // A sub-project moved out of the focused project would vanish from the canvas: show everything.
+      if (!inScope(key)) ui.setProject('all');
       return true;
     } catch (err) {
       const current = byId(key);
@@ -475,13 +484,13 @@ export const useOstTreeStore = defineStore('ostTree', () => {
     error,
     // getters
     byId,
-    products,
+    projects,
     selected,
     roots,
     placed,
     descendantCount,
     ancestors,
-    rootOf,
+    inScope,
     // actions
     setServiceFactory,
     clearError,
@@ -491,7 +500,7 @@ export const useOstTreeStore = defineStore('ostTree', () => {
     loadTree,
     patchNode,
     createNode,
-    createProduct,
+    createProject,
     moveNode,
     reorderNode,
     deleteNode,

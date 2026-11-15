@@ -55,6 +55,16 @@
       </div>
 
       <div class="ost-panel__footer">
+        <button
+          v-if="node.type === 'project' && node.parent"
+          type="button"
+          class="ost-btn ost-panel__action"
+          title="Take this project out of its parent project: it becomes a top-level project"
+          data-cy="ost-move-top"
+          @click="moveToTop"
+        >
+          Move to top level
+        </button>
         <button type="button" class="ost-btn ost-panel__action" data-cy="ost-delete" @click="ui.askDelete(node.id)">Delete</button>
       </div>
     </div>
@@ -78,7 +88,8 @@
 <script setup lang="ts">
 /**
  * Right-hand detail panel (346px): type kicker, clickable ancestor breadcrumb, editable title,
- * hide button; tabs by type (PanelTabs); Delete. Hiding keeps the selection and leaves a
+ * hide button; tabs by type (PanelTabs); Delete, and for a sub-project "Move to top level" (dragging
+ * can only nest a project deeper or elsewhere, never back to the top). Hiding keeps the selection and leaves a
  * "Details" tab on the canvas edge; a node click reopens it too (ui.select).
  */
 import { computed, nextTick, ref, watch } from 'vue';
@@ -119,7 +130,7 @@ const activeTab = computed<PanelTab>(() => {
   const tabs = node.value ? panelTabsFor(node.value.type) : [];
   return tabs.includes(ui.panelTab) ? ui.panelTab : 'detail';
 });
-/** Title limits per type: products 100, assumptions + evidence 500, the rest 200. */
+/** Title limits per type: projects 100, assumptions + evidence 500, the rest 200. */
 const titleMax = computed(() => (node.value ? titleMaxFor(node.value.type) : 200));
 /** The error slot only shows messages about the node on screen. */
 const shownError = computed(() => {
@@ -216,6 +227,13 @@ function commitTitle() {
 function go(key: string) {
   ui.select(key);
   ui.requestCentre(key);
+}
+
+/** A sub-project leaves its parent project and becomes a top-level project (placed last); it stays selected. */
+async function moveToTop() {
+  const key = node.value?.id;
+  if (!key) return;
+  if (await run(() => tree.moveNode(key, null))) ui.requestCentre(key);
 }
 
 /** Hiding moves focus to the "Details" edge tab, reopening from it back to the hide button. */

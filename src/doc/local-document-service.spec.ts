@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RuleError } from '@/ost/ost-errors';
 import type { TreeNodeDTO } from '@/ost/ost.model';
 
-import { type DocNode, type OstDocument, emptyDocument, newNodeFields, validateDocument } from './document';
+import { type DocNode, MAX_DEPTH, type OstDocument, emptyDocument, newNodeFields, validateDocument } from './document';
 import LocalDocumentService from './local-document-service';
 
-/** product 1 > outcome 2 > opportunity 3 > (opportunity 4, solution 5 > assumption 6 > evidence 7, solution 8, evidence 9); product 10. */
+/** project 1 > outcome 2 > opportunity 3 > (opportunity 4, solution 5 > assumption 6 > evidence 7, solution 8, evidence 9); project 10. */
 function fixture(): OstDocument {
   const doc = emptyDocument('Fixture');
   const add = (id: number, type: DocNode['type'], parentId: number | null, sortOrder = 0, extra: Partial<DocNode> = {}) =>
@@ -24,7 +24,7 @@ function fixture(): OstDocument {
       questions: [],
       ...extra,
     });
-  add(1, 'product', null, 0);
+  add(1, 'project', null, 0);
   add(2, 'outcome', 1);
   add(3, 'opportunity', 2, 0, {
     links: [{ id: 5, name: 'Notes', url: 'https://example.com/notes' }],
@@ -36,7 +36,7 @@ function fixture(): OstDocument {
   add(7, 'evidence', 6);
   add(8, 'solution', 3, 1);
   add(9, 'evidence', 3);
-  add(10, 'product', null, 1);
+  add(10, 'project', null, 1);
   return doc;
 }
 
@@ -74,14 +74,14 @@ describe('LocalDocumentService', () => {
       expect(closed.isOpen).toBe(false);
       expect(closed.snapshot()).toBeNull();
       expect(await rule(closed.getTree())).toBe('nodocument');
-      expect(await rule(closed.createNode({ type: 'PRODUCT', parentType: null, parentId: null }))).toBe('nodocument');
+      expect(await rule(closed.createNode({ type: 'PROJECT', parentType: null, parentId: null }))).toBe('nodocument');
     });
 
     it('keeps its own copy: neither the opened document nor a snapshot is the working document', async () => {
       const source = fixture();
       service.open(source);
-      await service.patchNode('product', 1, { title: 'Renamed' });
-      expect(source.nodes[0].title).toBe('product 1');
+      await service.patchNode('project', 1, { title: 'Renamed' });
+      expect(source.nodes[0].title).toBe('project 1');
       const snap = service.snapshot()!;
       snap.nodes[0].title = 'Tampered';
       expect(nodeOf(1)!.title).toBe('Renamed');
@@ -104,10 +104,10 @@ describe('LocalDocumentService', () => {
     });
 
     it('whatever the service holds is always a valid document', async () => {
-      await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 10 });
+      await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 10 });
       await service.moveNode({ nodeType: 'SOLUTION', nodeId: 5, parentType: 'OPPORTUNITY', parentId: 4 });
       await service.deleteNode('opportunity', 4);
-      await service.addLink('product', 1, { name: 'Mail', url: 'mailto:team@example.com' });
+      await service.addLink('project', 1, { name: 'Mail', url: 'mailto:team@example.com' });
       expect(() => validateDocument(service.snapshot())).not.toThrow();
     });
   });
@@ -117,7 +117,7 @@ describe('LocalDocumentService', () => {
       const tree = await service.getTree();
       expect(tree).toHaveLength(10);
       const byKey = Object.fromEntries(tree.map(n => [n.key, n])) as Record<string, TreeNodeDTO>;
-      expect(byKey['product-1']).toMatchObject({ type: 'PRODUCT', id: 1, parentKey: null, status: null, notes: null });
+      expect(byKey['project-1']).toMatchObject({ type: 'PROJECT', id: 1, parentKey: null, status: null, notes: null });
       expect(byKey['opportunity-4']).toMatchObject({
         type: 'OPPORTUNITY',
         parentKey: 'opportunity-3',
@@ -134,14 +134,14 @@ describe('LocalDocumentService', () => {
       const [first] = await service.getTree();
       first.title = 'Tampered';
       (await service.getTree()).find(n => n.key === 'opportunity-3')!.links!.push({ id: 99, name: 'x', url: 'https://x' });
-      expect(nodeOf(1)!.title).toBe('product 1');
+      expect(nodeOf(1)!.title).toBe('project 1');
       expect(nodeOf(3)!.links).toHaveLength(1);
     });
   });
 
   describe('createNode', () => {
     it('allocates the next id in the file, whatever the type', async () => {
-      const a = await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1 });
+      const a = await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 });
       const b = await service.createNode({ type: 'EVIDENCE', parentType: 'ASSUMPTION', parentId: 6 });
       expect([a.id, b.id]).toEqual([11, 12]);
       expect(a.key).toBe('outcome-11');
@@ -149,9 +149,9 @@ describe('LocalDocumentService', () => {
     });
 
     it('never reuses an id in a session, even after the newest node is deleted', async () => {
-      const a = await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1 });
+      const a = await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 });
       await service.deleteNode('outcome', a.id);
-      const b = await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1 });
+      const b = await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 });
       expect(b.id).toBe(a.id + 1);
     });
 
@@ -161,7 +161,7 @@ describe('LocalDocumentService', () => {
       // Other types under the same parent do not count.
       const evidence = await service.createNode({ type: 'EVIDENCE', parentType: 'OPPORTUNITY', parentId: 3 });
       expect(evidence.sortOrder).toBe(1);
-      const first = await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 10 });
+      const first = await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 10 });
       expect(first.sortOrder).toBe(0);
     });
 
@@ -177,15 +177,58 @@ describe('LocalDocumentService', () => {
     });
 
     it('takes a given title (trimmed) and refuses an invalid one', async () => {
-      const made = await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1, title: '  Grow  ' });
+      const made = await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1, title: '  Grow  ' });
       expect(made.title).toBe('Grow');
-      expect(await rule(service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1, title: 'x' }))).toBe('invalidtitle');
+      expect(await rule(service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1, title: 'x' }))).toBe('invalidtitle');
     });
 
-    it('creates a product with no parent, placed last', async () => {
-      const product = await service.createNode({ type: 'PRODUCT', parentType: null, parentId: null });
-      expect(product).toMatchObject({ key: 'product-11', parentKey: null, title: 'New product', sortOrder: 2 });
-      expect(await rule(service.createNode({ type: 'PRODUCT', parentType: 'PRODUCT', parentId: 1 }))).toBe('invalidparent');
+    it('creates a project with no parent, placed last', async () => {
+      const project = await service.createNode({ type: 'PROJECT', parentType: null, parentId: null });
+      expect(project).toMatchObject({ key: 'project-11', parentKey: null, title: 'New project', sortOrder: 2 });
+      // Half a parent is not a parent.
+      expect(await rule(service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: null }))).toBe('invalidparent');
+      expect(await rule(service.createNode({ type: 'PROJECT', parentType: null, parentId: 1 }))).toBe('invalidparent');
+    });
+
+    it('creates a sub-project under a project, ordered among the sub-projects, beside the outcomes', async () => {
+      const first = await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: 1, title: 'Inner' });
+      expect(first).toMatchObject({ key: 'project-11', parentKey: 'project-1', title: 'Inner', sortOrder: 0, status: null });
+      const second = await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: 1 });
+      expect(second).toMatchObject({ key: 'project-12', parentKey: 'project-1', sortOrder: 1 });
+      // Sub-projects and outcomes are ordered separately: the next outcome follows outcome 2.
+      expect((await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 })).sortOrder).toBe(1);
+      // A sub-project is a full project: it takes outcomes and projects of its own.
+      expect((await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 11 })).parentKey).toBe('project-11');
+      expect((await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: 11 })).parentKey).toBe('project-11');
+      // The top-level projects are untouched.
+      expect(order('project', null)).toEqual([
+        [1, 0],
+        [10, 1],
+      ]);
+      expect(() => validateDocument(service.snapshot())).not.toThrow();
+    });
+
+    it('only a project holds a project', async () => {
+      for (const [parentType, parentId] of [
+        ['OUTCOME', 2],
+        ['OPPORTUNITY', 3],
+        ['SOLUTION', 5],
+        ['ASSUMPTION', 6],
+        ['EVIDENCE', 7],
+      ] as const) {
+        expect(await rule(service.createNode({ type: 'PROJECT', parentType, parentId })), parentType).toBe('invalidparent');
+      }
+      expect(changes).not.toHaveBeenCalled();
+    });
+
+    it('nested projects count towards the depth limit', async () => {
+      let parentId = 10;
+      for (let depth = 2; depth <= MAX_DEPTH; depth++) {
+        parentId = (await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId })).id;
+      }
+      expect(await rule(service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId }))).toBe('toodeep');
+      expect(await rule(service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId }))).toBe('toodeep');
+      expect(() => validateDocument(service.snapshot())).not.toThrow();
     });
 
     it('enforces the allowed parent -> child types', async () => {
@@ -193,17 +236,17 @@ describe('LocalDocumentService', () => {
       expect(await rule(service.createNode({ type: 'EVIDENCE', parentType: 'SOLUTION', parentId: 5 }))).toBe('invalidparent');
       expect(await rule(service.createNode({ type: 'OUTCOME', parentType: 'EVIDENCE', parentId: 7 }))).toBe('invalidparent');
       expect(await rule(service.createNode({ type: 'OUTCOME', parentType: null, parentId: null }))).toBe('parentmissing');
-      expect(await rule(service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 99 }))).toBe('parentmissing');
+      expect(await rule(service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 99 }))).toBe('parentmissing');
       // The parent must be of the type the request says it is.
       expect(await rule(service.createNode({ type: 'OPPORTUNITY', parentType: 'OUTCOME', parentId: 3 }))).toBe('parentmissing');
-      expect(await rule(service.createNode({ type: 'BET' as never, parentType: 'PRODUCT', parentId: 1 }))).toBe('unknowntype');
+      expect(await rule(service.createNode({ type: 'BET' as never, parentType: 'PROJECT', parentId: 1 }))).toBe('unknowntype');
     });
 
     it('reports a change only when something was created', async () => {
       await rule(service.createNode({ type: 'SOLUTION', parentType: 'OUTCOME', parentId: 2 }));
       expect(changes).not.toHaveBeenCalled();
       expect(service.snapshot()!.nodes).toHaveLength(10);
-      await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1 });
+      await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 });
       expect(changes).toHaveBeenCalledTimes(1);
     });
   });
@@ -218,7 +261,7 @@ describe('LocalDocumentService', () => {
     });
 
     it('accepts the node type in any case', async () => {
-      expect((await service.patchNode('PRODUCT', 1, { title: 'Upper' })).title).toBe('Upper');
+      expect((await service.patchNode('PROJECT', 1, { title: 'Upper' })).title).toBe('Upper');
     });
 
     it('trims titles and owners; null or empty clears notes and owner', async () => {
@@ -231,7 +274,7 @@ describe('LocalDocumentService', () => {
     });
 
     it('applies the title limit of the node type', async () => {
-      expect(await rule(service.patchNode('product', 1, { title: 'p'.repeat(101) }))).toBe('invalidtitle');
+      expect(await rule(service.patchNode('project', 1, { title: 'p'.repeat(101) }))).toBe('invalidtitle');
       expect((await service.patchNode('outcome', 2, { title: 'o'.repeat(200) })).title).toHaveLength(200);
       expect(await rule(service.patchNode('outcome', 2, { title: 'o'.repeat(201) }))).toBe('invalidtitle');
       expect((await service.patchNode('evidence', 7, { title: 'e'.repeat(500) })).title).toHaveLength(500);
@@ -246,7 +289,7 @@ describe('LocalDocumentService', () => {
       expect(await rule(service.patchNode('opportunity', 3, { valueRating: 6 }))).toBe('invalidvaluerating');
       expect(await rule(service.patchNode('assumption', 6, { confidence: -1 }))).toBe('invalidconfidence');
       expect(await rule(service.patchNode('assumption', 6, { owner: 'o'.repeat(101) }))).toBe('invalidowner');
-      expect(await rule(service.patchNode('product', 1, { notes: 'n'.repeat(20001) }))).toBe('invalidnotes');
+      expect(await rule(service.patchNode('project', 1, { notes: 'n'.repeat(20001) }))).toBe('invalidnotes');
       expect((await service.patchNode('assumption', 6, { confidence: 0 })).confidence).toBe(0);
     });
 
@@ -329,14 +372,81 @@ describe('LocalDocumentService', () => {
       ]);
     });
 
-    it('reorders products (no parent)', async () => {
-      const res = await service.moveNode({ nodeType: 'PRODUCT', nodeId: 10, parentType: null, parentId: null, position: 0 });
+    it('reorders projects (no parent)', async () => {
+      const res = await service.moveNode({ nodeType: 'PROJECT', nodeId: 10, parentType: null, parentId: null, position: 0 });
       expect(res.node.parentKey).toBeNull();
-      expect(order('product', null)).toEqual([
+      expect(order('project', null)).toEqual([
         [10, 0],
         [1, 1],
       ]);
-      expect(await rule(service.moveNode({ nodeType: 'PRODUCT', nodeId: 10, parentType: 'PRODUCT', parentId: 1 }))).toBe('invalidparent');
+      expect(await rule(service.moveNode({ nodeType: 'PROJECT', nodeId: 10, parentType: 'PROJECT', parentId: null }))).toBe(
+        'invalidparent',
+      );
+    });
+
+    it('nests a project under another project, and moves it back out to the top level', async () => {
+      const nested = await service.moveNode({ nodeType: 'PROJECT', nodeId: 1, parentType: 'PROJECT', parentId: 10 });
+      expect(nested.node).toMatchObject({ key: 'project-1', parentKey: 'project-10', sortOrder: 0 });
+      expect(nested.node.lastModifiedDate).not.toBe('2026-01-01T00:00:00.000Z');
+      // The top level closes the gap; the project keeps its whole subtree.
+      expect(order('project', null)).toEqual([[10, 0]]);
+      expect(order('project', 10)).toEqual([[1, 0]]);
+      expect(nodeOf(2)!.parentId).toBe(1);
+      expect(() => validateDocument(service.snapshot())).not.toThrow();
+
+      const back = await service.moveNode({ nodeType: 'PROJECT', nodeId: 1, parentType: null, parentId: null, position: 0 });
+      expect(back.node).toMatchObject({ parentKey: null, sortOrder: 0 });
+      expect(order('project', null)).toEqual([
+        [1, 0],
+        [10, 1],
+      ]);
+      expect(order('project', 10)).toEqual([]);
+    });
+
+    it('reorders sub-projects among themselves, leaving the outcomes beside them alone', async () => {
+      const a = (await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: 1 })).id;
+      const b = (await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: 1 })).id;
+      const c = (await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: 1 })).id;
+      await service.moveNode({ nodeType: 'PROJECT', nodeId: c, parentType: 'PROJECT', parentId: 1, position: 0 });
+      expect(order('project', 1)).toEqual([
+        [c, 0],
+        [a, 1],
+        [b, 2],
+      ]);
+      expect(order('outcome', 1)).toEqual([[2, 0]]);
+    });
+
+    it('refuses to move a project under itself or anywhere inside its own subtree', async () => {
+      // project 1 > project 11 > project 12
+      const inner = (await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: 1 })).id;
+      const innermost = (await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: inner })).id;
+      changes.mockClear();
+      const before = service.snapshot();
+      expect(await rule(service.moveNode({ nodeType: 'PROJECT', nodeId: 1, parentType: 'PROJECT', parentId: 1 }))).toBe('cycle');
+      expect(await rule(service.moveNode({ nodeType: 'PROJECT', nodeId: 1, parentType: 'PROJECT', parentId: inner }))).toBe('cycle');
+      expect(await rule(service.moveNode({ nodeType: 'PROJECT', nodeId: 1, parentType: 'PROJECT', parentId: innermost }))).toBe('cycle');
+      expect(await rule(service.moveNode({ nodeType: 'PROJECT', nodeId: inner, parentType: 'PROJECT', parentId: innermost }))).toBe(
+        'cycle',
+      );
+      expect(await rule(service.moveNode({ nodeType: 'PROJECT', nodeId: 10, parentType: 'OUTCOME', parentId: 2 }))).toBe('invalidparent');
+      expect(service.snapshot()).toEqual(before);
+      expect(changes).not.toHaveBeenCalled();
+    });
+
+    it('refuses a move that would make the tree too deep, counting the levels inside the moved project', async () => {
+      // project 1 is six levels tall (project > outcome > opportunity > solution > assumption > evidence).
+      const chain = [10];
+      for (let depth = 2; depth <= MAX_DEPTH - 5; depth++) {
+        chain.push((await service.createNode({ type: 'PROJECT', parentType: 'PROJECT', parentId: chain.at(-1)! })).id);
+      }
+      // chain[i] is at level i + 1: under level 59 the evidence would be at level 65.
+      expect(await rule(service.moveNode({ nodeType: 'PROJECT', nodeId: 1, parentType: 'PROJECT', parentId: chain[MAX_DEPTH - 6] }))).toBe(
+        'toodeep',
+      );
+      expect(nodeOf(1)!.parentId).toBeNull();
+      await service.moveNode({ nodeType: 'PROJECT', nodeId: 1, parentType: 'PROJECT', parentId: chain[MAX_DEPTH - 7] });
+      expect(nodeOf(1)!.parentId).toBe(chain[MAX_DEPTH - 7]);
+      expect(() => validateDocument(service.snapshot())).not.toThrow();
     });
 
     it('refuses a move under itself or one of its descendants', async () => {
@@ -381,8 +491,8 @@ describe('LocalDocumentService', () => {
       expect(nodeOf(6)).toBeDefined();
     });
 
-    it('removes a product with everything under it', async () => {
-      await service.deleteNode('product', 1);
+    it('removes a project with everything under it', async () => {
+      await service.deleteNode('project', 1);
       expect(service.snapshot()!.nodes.map(n => n.id)).toEqual([10]);
     });
 
@@ -395,7 +505,7 @@ describe('LocalDocumentService', () => {
 
   describe('links', () => {
     it('adds a link with the next id in the file', async () => {
-      const link = await service.addLink('product', 1, { name: '  Roadmap ', url: ' https://example.com/roadmap ' });
+      const link = await service.addLink('project', 1, { name: '  Roadmap ', url: ' https://example.com/roadmap ' });
       expect(link).toEqual({ id: 6, name: 'Roadmap', url: 'https://example.com/roadmap' });
       expect(nodeOf(1)!.links).toEqual([link]);
       expect((await service.addLink('outcome', 2, { name: 'Mail', url: 'mailto:someone@example.com' })).id).toBe(7);
@@ -410,7 +520,7 @@ describe('LocalDocumentService', () => {
         '',
         `https://example.com/${'u'.repeat(2000)}`,
       ]) {
-        expect(await rule(service.addLink('product', 1, { name: 'Bad', url })), url).toBe('linkurlinvalid');
+        expect(await rule(service.addLink('project', 1, { name: 'Bad', url })), url).toBe('linkurlinvalid');
       }
       expect(await rule(service.updateLink(5, { url: 'javascript:alert(1)' }))).toBe('linkurlinvalid');
       expect(nodeOf(1)!.links).toEqual([]);
@@ -418,8 +528,8 @@ describe('LocalDocumentService', () => {
     });
 
     it('refuses an empty or over-long name', async () => {
-      expect(await rule(service.addLink('product', 1, { name: '  ', url: 'https://example.com' }))).toBe('linknameinvalid');
-      expect(await rule(service.addLink('product', 1, { name: 'n'.repeat(101), url: 'https://example.com' }))).toBe('linknameinvalid');
+      expect(await rule(service.addLink('project', 1, { name: '  ', url: 'https://example.com' }))).toBe('linknameinvalid');
+      expect(await rule(service.addLink('project', 1, { name: 'n'.repeat(101), url: 'https://example.com' }))).toBe('linknameinvalid');
     });
 
     it('updates name and URL independently, found by link id alone', async () => {
@@ -466,10 +576,10 @@ describe('LocalDocumentService', () => {
   });
 
   it('reports every accepted change exactly once, and no refused one', async () => {
-    await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1 });
-    await service.patchNode('product', 1, { title: 'Changed' });
+    await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 });
+    await service.patchNode('project', 1, { title: 'Changed' });
     await service.moveNode({ nodeType: 'SOLUTION', nodeId: 8, parentType: 'OPPORTUNITY', parentId: 3, position: 0 });
-    await service.addLink('product', 1, { name: 'A', url: 'https://example.com' });
+    await service.addLink('project', 1, { name: 'A', url: 'https://example.com' });
     await service.updateLink(5, { name: 'B' });
     await service.deleteLink(5);
     await service.addQuestion(3, 'Q?');

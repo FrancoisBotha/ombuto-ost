@@ -2,8 +2,8 @@
   <section class="ost-canvas-page" data-cy="ostCanvasPage">
     <CanvasToolbar
       :zoom="zoom"
-      @product="chooseProduct"
-      @add-product="canvas?.addProduct()"
+      @project="chooseProject"
+      @add-project="canvas?.addProject()"
       @zoom-in="canvas?.zoomIn()"
       @zoom-out="canvas?.zoomOut()"
       @fit="canvas?.fit()"
@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 /**
- * The tree canvas page: toolbar (product scope, search, filters, zoom), node palette (left), the
+ * The tree canvas page: toolbar (project focus, search, filters, zoom), node palette (left), the
  * canvas and the detail panel (right) of the selected node.
  *
  * With focus on the page (not in a field), Delete asks to delete the selected node. When the page
@@ -45,8 +45,14 @@ const zoom = ref(1);
 // The panel (breadcrumb, child list, quick-add) asks for a node to be centred.
 watch(
   () => ui.centreRequest,
-  req => req && canvas.value?.centreOn(req.key),
+  req => req && centre(req.key),
 );
+
+/** A node outside the focused project (an ancestor in the breadcrumb) is not on the canvas: show every project first. */
+function centre(key: string) {
+  if (tree.byId(key) && !tree.inScope(key)) ui.setProject('all');
+  return canvas.value?.centreOn(key);
+}
 
 onMounted(() => window.addEventListener('keydown', onKeydown));
 
@@ -64,12 +70,12 @@ function selectFromCanvas(key: string) {
 function jumpTo(key: string) {
   if (!tree.byId(key)) return;
   ui.select(key);
-  void canvas.value?.centreOn(key);
+  void centre(key);
 }
 
 /** The canvas re-fits when the scope changes (TreeCanvas watches it). */
-function chooseProduct(productId: string | 'all') {
-  ui.setProduct(productId);
+function chooseProject(projectId: string | 'all') {
+  ui.setProject(projectId);
 }
 
 // ---- editing ------------------------------------------------------------------------------------

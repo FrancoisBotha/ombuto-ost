@@ -24,7 +24,7 @@ const box = (x: number, y: number, w = 200, h = 90): Placed => ({ x, y, w, h }) 
 describe('edit rules', () => {
   describe('+ menu options', () => {
     const cases: [NodeType, NodeType[]][] = [
-      ['product', ['outcome']],
+      ['project', ['outcome', 'project']],
       ['outcome', ['opportunity']],
       ['opportunity', ['opportunity', 'solution', 'evidence']],
       ['solution', ['assumption']],
@@ -40,12 +40,13 @@ describe('edit rules', () => {
     });
 
     it('returns a copy (callers cannot mutate ALLOWED)', () => {
-      childTypesFor('opportunity').push('product');
+      childTypesFor('opportunity').push('project');
       expect(ALLOWED.opportunity).toEqual(['opportunity', 'solution', 'evidence']);
     });
 
-    it('the palette offers every type but products', () => {
-      expect(CREATABLE_TYPES).toEqual(['outcome', 'opportunity', 'solution', 'assumption', 'evidence']);
+    it('the palette offers every type, in tree order (a palette project is a sub-project)', () => {
+      expect(CREATABLE_TYPES).toEqual(['project', 'outcome', 'opportunity', 'solution', 'assumption', 'evidence']);
+      expect(NODE_TYPES.filter(parent => canAttach('project', parent))).toEqual(['project']);
     });
   });
 
@@ -116,8 +117,15 @@ describe('edit rules', () => {
       expect([...legalParents('evidence-1', nodes)].sort()).toEqual(['assumption-1', 'assumption-2', 'assumption-3', 'opportunity-2']);
     });
 
-    it('products have no legal parent', () => {
-      expect(legalParents('product-1', nodes).size).toBe(0);
+    it('a project may go under any other project, except the ones inside it', () => {
+      expect([...legalParents('project-1', nodes)]).toEqual(['project-2']);
+      expect([...legalParents('project-2', nodes)]).toEqual(['project-1']);
+      // project-1 > project-3 > project-4: neither project-1 nor project-3 may go under project-4
+      const nested = [...nodes, node('project-3', 'project-1'), node('project-4', 'project-3')];
+      expect([...legalParents('project-1', nested)]).toEqual(['project-2']);
+      expect([...legalParents('project-3', nested)]).toEqual(['project-2']);
+      expect([...legalParents('project-4', nested)].sort()).toEqual(['project-1', 'project-2']);
+      expect([...legalParents('project-2', nested)].sort()).toEqual(['project-1', 'project-3', 'project-4']);
     });
 
     it('agrees with rules.canReparent for every pair', () => {
@@ -132,13 +140,13 @@ describe('edit rules', () => {
     });
 
     it('never loops on cyclic data', () => {
-      const cyclic = [node('opportunity-1', 'opportunity-2'), node('opportunity-2', 'opportunity-1'), node('outcome-1', 'product-1')];
+      const cyclic = [node('opportunity-1', 'opportunity-2'), node('opportunity-2', 'opportunity-1'), node('outcome-1', 'project-1')];
       expect([...legalParents('opportunity-1', cyclic)]).toEqual(['outcome-1']);
     });
 
     it('attach targets for a palette type are the nodes that permit it', () => {
       expect([...attachTargets('solution', nodes)].sort()).toEqual(['opportunity-1', 'opportunity-2']);
-      expect([...attachTargets('outcome', nodes)].sort()).toEqual(['product-1', 'product-2']);
+      expect([...attachTargets('outcome', nodes)].sort()).toEqual(['project-1', 'project-2']);
       expect([...attachTargets('evidence', nodes)].sort()).toEqual([
         'assumption-1',
         'assumption-2',
@@ -164,14 +172,14 @@ describe('edit rules', () => {
     });
 
     it('uses the title limits per type', () => {
-      expect(titleMax('product')).toBe(100);
+      expect(titleMax('project')).toBe(100);
       expect(titleMax('outcome')).toBe(200);
       expect(titleMax('opportunity')).toBe(200);
       expect(titleMax('solution')).toBe(200);
       expect(titleMax('assumption')).toBe(500);
       expect(titleMax('evidence')).toBe(500);
       expect(validateTitle('evidence', 'x'.repeat(500)).ok).toBe(true);
-      expect(validateTitle('product', 'x'.repeat(101)).ok).toBe(false);
+      expect(validateTitle('project', 'x'.repeat(101)).ok).toBe(false);
     });
   });
 });

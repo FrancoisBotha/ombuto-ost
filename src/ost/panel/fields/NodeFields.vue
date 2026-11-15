@@ -23,7 +23,7 @@
  * value + priority (opportunity). Every change is a tree-store patch run through the panel's
  * error slot (panel-action.ts).
  *
- * Renders nothing for types without such fields (product, outcome, evidence).
+ * Renders nothing for types without such fields (project, outcome, evidence).
  */
 import { computed } from 'vue';
 

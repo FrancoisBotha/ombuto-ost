@@ -73,18 +73,25 @@ app's files were fetched, as with any web page. It never sees your tree.
 
 ## Using it
 
-- **Start**: New tree, Open file, or Load example.
-- **Build the tree**: products, outcomes, opportunities, solutions, assumptions and evidence. Add a
+- **Start**: New tree, Open file, or Open example. File > Open example opens the built-in example at
+  any time, as a new unsaved tree.
+- **Build the tree**: projects, outcomes, opportunities, solutions, assumptions and evidence. Add a
   child with the `+` on a node, or drag a type from the palette. Double-click a title to rename.
   Drag a node onto another to move it; Alt+Left / Alt+Right reorders it among its siblings.
+- **Projects inside projects**: a project holds outcomes and other projects. "+ Project" in the
+  toolbar adds a top-level project; the `+` on a project, or Project in the palette, adds a
+  sub-project. Drag a project onto another project to nest it, and use "Move to top level" in its
+  details to take it back out.
 - **Details**: select a node to edit its notes and fields, add named links, and (for opportunities)
   keep a list of open questions.
-- **Find your way**: search, filter by type, collapse branches, minimap, product picker.
+- **Find your way**: search, filter by type, collapse branches, minimap, and the project picker,
+  which shows one project (top-level or nested) with everything under it, or all projects.
 - **Save**: File > Save (Ctrl/Cmd+S) saves to a file on your computer. In Chrome and Edge, Save
   writes back to the file you opened and the top bar says "Saved". In Firefox and Safari it
   downloads a copy and the top bar says "Downloaded a copy": a web page cannot see whether a
   download arrived, so check your downloads folder. Ctrl/Cmd+O opens a file.
-- **Export**: File > Export gives PNG, SVG or a Markdown outline.
+- **Export**: File > Export gives PNG, SVG or a Markdown outline of what the project picker shows.
+  In the outline every project is a heading and a sub-project names the projects it sits in.
 - **Install**: your browser's "Install app" puts Ombuto OST in its own window. It works offline
   either way.
 
@@ -104,7 +111,7 @@ and for AI agents:
   "nodes": [
     {
       "id": 1,
-      "type": "product",
+      "type": "project",
       "parentId": null,
       "title": "Meal-planning app",
       "notes": "",
@@ -123,10 +130,18 @@ and for AI agents:
 }
 ```
 
-- `type` is one of `product`, `outcome`, `opportunity`, `solution`, `assumption`, `evidence`.
-- `parentId` is the `id` of the parent node, and `null` for a product. `sortOrder` orders siblings.
+- `type` is one of `project`, `outcome`, `opportunity`, `solution`, `assumption`, `evidence`.
+- `parentId` is the `id` of the parent node, and `null` for a top-level project. A project sits at
+  the top or under another project, and holds outcomes and projects; an outcome sits under a
+  project, an opportunity under an outcome or an opportunity, a solution under an opportunity, an
+  assumption under a solution, evidence under an opportunity or an assumption.
+- `sortOrder` orders siblings of the same type under one parent.
 - `status` applies to opportunities, solutions and assumptions; `priority`, `valueRating` and
   `questions` to opportunities; `confidence` and `owner` to assumptions.
+
+Files saved before projects could nest call a project a `product` (`"type": "product"`). They still
+open: a `product` is read as a `project`, and the next save writes `project`. That mapping lives in
+[`src/doc/legacy.ts`](src/doc/legacy.ts).
 
 The format is defined in one place, [`src/doc/document.ts`](src/doc/document.ts), which also
 validates every file on open. A file that is not in this format is refused with a clear message,
@@ -138,15 +153,15 @@ and the tree that was open stays open. File content is only ever shown as text, 
 The app refuses to open a file beyond these limits, and refuses an edit that would cross one, so
 it never saves a file it cannot open again.
 
-| Limit                          | Value                                                            |
-| ------------------------------ | ---------------------------------------------------------------- |
-| Nodes in a tree                | 1,000                                                            |
-| Depth (the product is level 1) | 64 levels                                                        |
-| Title                          | 2 to 200 characters (products 100, assumptions and evidence 500) |
-| Notes                          | 20,000 characters per node                                       |
-| Links, open questions          | 200 of each per node                                             |
-| File size                      | 20 MB                                                            |
-| Ids                            | whole numbers from 1 to 9,007,199,254,740,991                    |
+| Limit                                  | Value                                                            |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| Nodes in a tree                        | 1,000                                                            |
+| Depth (a top-level project is level 1) | 64 levels                                                        |
+| Title                                  | 2 to 200 characters (projects 100, assumptions and evidence 500) |
+| Notes                                  | 20,000 characters per node                                       |
+| Links, open questions                  | 200 of each per node                                             |
+| File size                              | 20 MB                                                            |
+| Ids                                    | whole numbers from 1 to 9,007,199,254,740,991                    |
 
 The node limit is a measured one. With 1,000 nodes (headless Chromium on a desktop PC, the built
 app) a tree opens in 0.2 to 0.4 s, adding a node takes 0.2 to 0.35 s, a rename 0.1 to 0.2 s, a

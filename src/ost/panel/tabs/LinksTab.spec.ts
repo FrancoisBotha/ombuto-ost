@@ -30,8 +30,8 @@ async function mountInPanel(nodeKey: string) {
 
 /** A tree whose only node carries the given link URL, as a file could. */
 async function mountWithStoredUrl(url: string) {
-  const ctx = await setupStores([dto('product-1', null, { links: [{ id: 5, name: 'From a file', url }] })]);
-  const wrapper = await mountWith(LinksTab, ctx.pinia, { nodeKey: 'product-1' });
+  const ctx = await setupStores([dto('project-1', null, { links: [{ id: 5, name: 'From a file', url }] })]);
+  const wrapper = await mountWith(LinksTab, ctx.pinia, { nodeKey: 'project-1' });
   return { ...ctx, wrapper };
 }
 
@@ -469,7 +469,7 @@ describe('LinksTab', () => {
     });
 
     it('removing the last link brings the empty note back', async () => {
-      const { wrapper, service } = await mountTab('product-1');
+      const { wrapper, service } = await mountTab('project-1');
       service.deleteLink.resolves();
       await wrapper.get('[data-cy="ost-link-row-1"] [data-cy="ost-link-remove"]').trigger('click');
       await flushPromises();

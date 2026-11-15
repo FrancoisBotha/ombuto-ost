@@ -26,7 +26,7 @@
       <div class="ost-start__actions">
         <button type="button" class="ost-btn ost-btn--primary" data-cy="ost-empty-new" @click="doc.request('new')">New tree</button>
         <button type="button" class="ost-btn" data-cy="ost-empty-open" @click="doc.request('open')">Open file</button>
-        <button type="button" class="ost-btn" data-cy="ost-empty-example" @click="doc.request('example')">Load example</button>
+        <button type="button" class="ost-btn" data-cy="ost-empty-example" @click="doc.request('example')">Open example</button>
       </div>
     </div>
   </div>
@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 /**
- * First run, or no document open: New tree · Open file · Load example.
+ * First run, or no document open: New tree · Open file · Open example.
  *
  * When a working copy from an earlier visit turned out to be unreadable, this is also where the app
  * says so: the copy is kept until the user saves its contents or deletes it.

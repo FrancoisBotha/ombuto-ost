@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type VueWrapper, enableAutoUnmount, flushPromises } from '@vue/test-utils';
 
+import { registerPendingEdit } from '@/doc/pending-edits';
 import * as exporters from '@/export';
 
+import EmptyState from './EmptyState.vue';
 import FileMenu from './FileMenu.vue';
 import { exampleRecord, mountShell, setupShellStores } from './shell.test-util';
 
@@ -37,7 +39,7 @@ describe('FileMenu', () => {
     await flushPromises();
   }
 
-  it('is a menu button: closed at first, opens with New, Open file, Save, Save as and Export', async () => {
+  it('is a menu button: closed at first, opens with New, Open file, Open example, Save, Save as and Export', async () => {
     const { w } = await withDocument();
     const button = cy(w, 'ost-file-menu');
     expect(button.attributes('aria-haspopup')).toBe('menu');
@@ -51,7 +53,7 @@ describe('FileMenu', () => {
     const labels = list
       .findAll(':scope > [role="menuitem"], :scope > .ost-file-menu__sub > [role="menuitem"]')
       .map(i => i.find('span').text());
-    expect(labels).toEqual(['New tree', 'Open file…', 'Save', 'Save as…', 'Export']);
+    expect(labels).toEqual(['New tree', 'Open file…', 'Open example', 'Save', 'Save as…', 'Export']);
     // Focus moves into the menu.
     expect(focused()).toBe('ost-file-new');
   });
@@ -77,18 +79,18 @@ describe('FileMenu', () => {
     const request = vi.spyOn(doc, 'request').mockResolvedValue(undefined);
     const save = vi.spyOn(doc, 'save').mockResolvedValue(true);
     const saveAs = vi.spyOn(doc, 'saveAs').mockResolvedValue(true);
-    for (const item of ['ost-file-new', 'ost-file-open', 'ost-file-save', 'ost-file-save-as']) {
+    for (const item of ['ost-file-new', 'ost-file-open', 'ost-file-example', 'ost-file-save', 'ost-file-save-as']) {
       await openMenu(w);
       await cy(w, item).trigger('click');
       expect(w.find('[data-cy="ost-file-menu-list"]').exists(), item).toBe(false);
       expect(focused(), item).toBe('ost-file-menu');
     }
-    expect(request.mock.calls.map(c => c[0])).toEqual(['new', 'open']);
+    expect(request.mock.calls.map(c => c[0])).toEqual(['new', 'open', 'example']);
     expect(save).toHaveBeenCalledTimes(1);
     expect(saveAs).toHaveBeenCalledTimes(1);
   });
 
-  it('with no document open, Save, Save as and Export are disabled; New and Open still work', async () => {
+  it('with no document open, Save, Save as and Export are disabled; New, Open and Open example still work', async () => {
     const ctx = setupShellStores();
     await ctx.doc.init();
     const w = await mountShell(FileMenu, ctx.pinia);
@@ -98,9 +100,90 @@ describe('FileMenu', () => {
     }
     expect(cy(w, 'ost-file-new').attributes('disabled')).toBeUndefined();
     expect(cy(w, 'ost-file-open').attributes('disabled')).toBeUndefined();
+    expect(cy(w, 'ost-file-example').attributes('disabled')).toBeUndefined();
     // Arrow keys skip what is disabled.
     await press(w, 'ost-file-menu-list', 'End');
-    expect(focused()).toBe('ost-file-open');
+    expect(focused()).toBe('ost-file-example');
+  });
+
+  describe('Open example', () => {
+    it('is worded like the button on the empty state', async () => {
+      const { w } = await withDocument();
+      await openMenu(w);
+      expect(cy(w, 'ost-file-example').find('span').text()).toBe('Open example');
+      const empty = await mountShell(EmptyState, setupShellStores().pinia);
+      expect(empty.get('[data-cy="ost-empty-example"]').text()).toBe('Open example');
+    });
+
+    it('opens the built-in example as an unsaved tree that belongs to no file', async () => {
+      const ctx = setupShellStores();
+      await ctx.doc.init();
+      const w = await mountShell(FileMenu, ctx.pinia);
+      await openMenu(w);
+      await cy(w, 'ost-file-example').trigger('click');
+      await flushPromises();
+      expect(ctx.doc.hasDocument).toBe(true);
+      expect(ctx.doc.name).toBe('Example: meal-planning app');
+      expect(ctx.doc.fileName).toBeNull();
+      expect(ctx.doc.savesInPlace).toBe(false);
+      expect(ctx.doc.lastSavedAt).toBeNull();
+      expect(ctx.doc.dirty).toBe(false);
+      expect(ctx.doc.pendingAction).toBeNull();
+      // The example shows the nesting: one top-level project holding sub-projects.
+      expect(ctx.tree.roots.map(p => p.title)).toEqual(['Meal-planning app']);
+      expect(ctx.tree.projects.filter(p => p.parent === 'project-1').map(p => p.title)).toEqual(['Weekly planner', 'Shopping list']);
+    });
+
+    it('replaces a saved, unchanged tree without asking, and lets go of its file', async () => {
+      const ctx = setupShellStores(exampleRecord({ fileName: 'meals.ost', savedAt: '2026-01-01T10:00:00.000Z' }));
+      await ctx.doc.init();
+      expect(ctx.doc.fileName).toBe('meals.ost');
+      expect(ctx.doc.dirty).toBe(false);
+      const w = await mountShell(FileMenu, ctx.pinia);
+      await openMenu(w);
+      await cy(w, 'ost-file-example').trigger('click');
+      await flushPromises();
+      expect(ctx.doc.pendingAction).toBeNull();
+      expect(ctx.doc.hasDocument).toBe(true);
+      expect(ctx.doc.fileName).toBeNull();
+      expect(ctx.doc.lastSavedAt).toBeNull();
+      expect(ctx.doc.dirty).toBe(false);
+    });
+
+    it('with unsaved changes it waits for the unsaved-changes answer: Cancel keeps the tree, discard opens the example', async () => {
+      const { w, doc, tree } = await withDocument();
+      await tree.patchNode('project-1', { title: 'Unsaved work' });
+      expect(doc.dirty).toBe(true);
+      await openMenu(w);
+      await cy(w, 'ost-file-example').trigger('click');
+      await flushPromises();
+      expect(doc.pendingAction).toBe('example');
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
+
+      await doc.resolvePending('cancel');
+      expect(doc.pendingAction).toBeNull();
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
+      expect(doc.dirty).toBe(true);
+
+      await openMenu(w);
+      await cy(w, 'ost-file-example').trigger('click');
+      await flushPromises();
+      await doc.resolvePending('discard');
+      expect(tree.byId('project-1')?.title).toBe('Meal-planning app');
+      expect(doc.dirty).toBe(false);
+      expect(doc.fileName).toBeNull();
+    });
+
+    it('text still being typed counts as an unsaved change: it is taken in, and the user is asked', async () => {
+      const { w, doc, tree } = await withDocument();
+      const unregister = registerPendingEdit(() => void tree.patchNode('project-1', { note: 'typed, not blurred' }));
+      await openMenu(w);
+      await cy(w, 'ost-file-example').trigger('click');
+      await flushPromises();
+      unregister();
+      expect(tree.byId('project-1')?.note).toBe('typed, not blurred');
+      expect(doc.pendingAction).toBe('example');
+    });
   });
 
   describe('keyboard', () => {

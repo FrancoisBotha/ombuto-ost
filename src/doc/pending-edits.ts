@@ -3,7 +3,7 @@
  *
  * A text field keeps a draft while the user types. The draft reaches the document a moment after
  * the last key press (`useLiveCommit`), and at once whenever the document is about to be read or
- * replaced: Save, New / Open / Load example, the autosave before the page is hidden or closed.
+ * replaced: Save, New / Open / Open example, the autosave before the page is hidden or closed.
  * `flushPendingEdits()` is that "at once": the document store calls it at every one of those
  * points, so no caller has to remember which field has the focus.
  *

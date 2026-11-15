@@ -5,8 +5,12 @@
 import { BAD_STATUS, GOOD_STATUS, evidenceStrength as ruleEvidenceStrength } from './rules';
 import type { NodeType, OstNode } from './types';
 
-/** Sibling group order of the tree (and so of the tidy layout). */
-export const CHILD_TYPE_ORDER: NodeType[] = ['outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
+/**
+ * Sibling group order of the tree (and so of the tidy layout and the exports). A project's own
+ * outcomes come before its sub-projects, so in an outline they are never read as part of the last
+ * sub-project.
+ */
+export const CHILD_TYPE_ORDER: NodeType[] = ['outcome', 'project', 'opportunity', 'solution', 'assumption', 'evidence'];
 
 export type PanelTab = 'detail' | 'links' | 'questions';
 
@@ -23,7 +27,7 @@ export function childrenOf(key: string, nodes: OstNode[]): OstNode[] {
 }
 
 /**
- * Ancestors from the root (product) down to the direct parent. Excludes the node itself. A caller
+ * Ancestors from the top-level project down to the direct parent. Excludes the node itself. A caller
  * that asks often passes its own key -> node index instead of the list, which is indexed per call.
  */
 export function breadcrumb(key: string, nodes: OstNode[] | Map<string, OstNode>): OstNode[] {
@@ -69,7 +73,7 @@ export function evidenceStrength(solutionKey: string, nodes: OstNode[]) {
 }
 
 export function countByType(nodes: OstNode[]): Record<NodeType, number> {
-  const counts: Record<NodeType, number> = { product: 0, outcome: 0, opportunity: 0, solution: 0, assumption: 0, evidence: 0 };
+  const counts: Record<NodeType, number> = { project: 0, outcome: 0, opportunity: 0, solution: 0, assumption: 0, evidence: 0 };
   for (const n of nodes) counts[n.type]++;
   return counts;
 }
@@ -78,8 +82,8 @@ const compareSiblings = (a: OstNode, b: OstNode) =>
   CHILD_TYPE_ORDER.indexOf(a.type) - CHILD_TYPE_ORDER.indexOf(b.type) || a.sortOrder - b.sortOrder || a.dbId - b.dbId;
 
 /**
- * Re-orders a flat list into tree pre-order: products by sortOrder, then each node's
- * children grouped outcome -> opportunity -> solution -> assumption -> evidence, each by
+ * Re-orders a flat list into tree pre-order: top-level projects by sortOrder, then each node's
+ * children grouped outcome -> project -> opportunity -> solution -> assumption -> evidence, each by
  * sortOrder, id. Orphans (parent missing) are kept at the end so nothing is silently lost.
  */
 export function orderTree(nodes: OstNode[]): OstNode[] {

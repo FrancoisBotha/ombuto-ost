@@ -1,14 +1,14 @@
 <template>
   <div class="ost-toolbar" data-cy="ost-canvas-toolbar">
-    <CanvasProductCombo :products="tree.products" :product-id="ui.productId" :counts="productCounts" @select="emit('product', $event)" />
+    <CanvasProjectCombo :projects="projectRows" :project-id="ui.projectId" @select="emit('project', $event)" />
     <button
       type="button"
       class="ost-btn ost-toolbar__branch-btn"
-      title="Add a product: a new branch of the tree"
-      data-cy="ost-add-product"
-      @click="emit('addProduct')"
+      title="Add a top-level project: a new branch of the tree"
+      data-cy="ost-add-project"
+      @click="emit('addProject')"
     >
-      + Product
+      + Project
     </button>
 
     <label class="ost-toolbar__search">
@@ -36,7 +36,7 @@
         type="button"
         class="ost-btn ost-toolbar__branch-btn"
         data-cy="ost-collapse-all"
-        title="Collapse all branches in the current product view"
+        title="Collapse all branches on the canvas"
         :disabled="!branchKeys.some(key => !ui.collapsed[key])"
         @click="setAllCollapsed(true)"
       >
@@ -46,7 +46,7 @@
         type="button"
         class="ost-btn ost-toolbar__branch-btn"
         data-cy="ost-expand-all"
-        title="Expand all branches in the current product view"
+        title="Expand all branches on the canvas"
         :disabled="!branchKeys.some(key => ui.collapsed[key])"
         @click="setAllCollapsed(false)"
       >
@@ -100,11 +100,11 @@
 
 <script setup lang="ts">
 /**
- * Canvas toolbar row: product scope · new product · search · collapse / expand all · type-filter chips · zoom −/%/+ · Fit.
+ * Canvas toolbar row: project focus · new top-level project · search · collapse / expand all · type-filter chips · zoom −/%/+ · Fit.
  *
  * The search box is also the keyboard way to any node: the canvas only renders the nodes in
  * view, so Tab cannot reach the rest. Enter emits `jump` with the next match (Shift+Enter the
- * previous; it wraps) — in tree order, among the types shown and the product(s) in scope — and the
+ * previous; it wraps) — in tree order, among the types shown and inside the focused project — and the
  * page selects and centres it. A status line announces "Match 2 of 5: <title>".
  */
 import { PhMagnifyingGlass } from '@phosphor-icons/vue';
@@ -116,13 +116,13 @@ import type { NodeType } from '../domain/types';
 import { useOstTreeStore } from '../stores/ost-tree.store';
 import { useOstUiStore } from '../stores/ost-ui.store';
 
-import CanvasProductCombo from './CanvasProductCombo.vue';
+import CanvasProjectCombo from './CanvasProjectCombo.vue';
 import { searchMatches } from './canvas-model';
 
 defineProps<{ zoom: number }>();
 const emit = defineEmits<{
-  product: [productId: string | 'all'];
-  addProduct: [];
+  project: [projectId: string | 'all'];
+  addProject: [];
   zoomIn: [];
   zoomOut: [];
   fit: [];
@@ -134,13 +134,18 @@ const ui = useOstUiStore();
 
 const CHIP_TYPES: NodeType[] = ['outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
 
-const productCounts = computed(() => Object.fromEntries(tree.products.map(p => [p.id, tree.descendantCount(p.id)])));
+/**
+ * The project picker's rows: every project in tree order, each with how deep it is nested (0 for
+ * a top-level project; a project's ancestors are all projects) and how many nodes it holds.
+ */
+const projectRows = computed(() =>
+  tree.projects.map(p => ({ id: p.id, title: p.title, depth: tree.ancestors(p.id).length, nodes: tree.descendantCount(p.id) })),
+);
 
-/** Include hidden descendants, but leave products outside the current scope untouched. */
+/** Include hidden descendants, but leave everything outside the focused project untouched. */
 const branchKeys = computed(() => {
-  const roots = new Set(tree.roots.map(root => root.id));
   const parents = new Set(tree.nodes.map(node => node.parent).filter(Boolean));
-  return tree.nodes.filter(node => parents.has(node.id) && roots.has(tree.rootOf(node.id))).map(node => node.id);
+  return tree.nodes.filter(node => parents.has(node.id) && tree.inScope(node.id)).map(node => node.id);
 });
 
 async function setAllCollapsed(collapsed: boolean) {
@@ -155,7 +160,7 @@ const cursor = ref(-1);
 const jumpStatus = ref('');
 
 watch(
-  () => [ui.query, ui.productId, ui.hiddenTypes] as const,
+  () => [ui.query, ui.projectId, ui.hiddenTypes] as const,
   () => {
     cursor.value = -1;
     jumpStatus.value = '';
@@ -170,8 +175,7 @@ function onEnter(event: KeyboardEvent) {
 }
 
 function jump(step: 1 | -1) {
-  const inScope = new Set(tree.roots.map(r => r.id));
-  const matches = searchMatches(tree.nodes, ui.query, ui.hiddenTypes, n => inScope.has(tree.rootOf(n.id)));
+  const matches = searchMatches(tree.nodes, ui.query, ui.hiddenTypes, n => tree.inScope(n.id));
   if (!matches.length) {
     cursor.value = -1;
     jumpStatus.value = ui.query.trim() ? 'No matching nodes on the canvas' : '';
@@ -189,12 +193,11 @@ function jump(step: 1 | -1) {
 }
 
 /**
- * The chips dim what is on the canvas, so their counts describe the canvas: the product in scope,
- * not the whole tree. The same scope the search jump uses.
+ * The chips dim what is on the canvas, so their counts describe the canvas: the focused project's
+ * subtree, not the whole tree. The same scope the search jump uses.
  */
 const chips = computed(() => {
-  const inScope = new Set(tree.roots.map(r => r.id));
-  const counts = countByType(tree.nodes.filter(n => inScope.has(tree.rootOf(n.id))));
+  const counts = countByType(tree.nodes.filter(n => tree.inScope(n.id)));
   return CHIP_TYPES.map(type => ({ type, label: TYPE_BOX[type].label, count: counts[type], on: !ui.hiddenTypes[type] }));
 });
 </script>

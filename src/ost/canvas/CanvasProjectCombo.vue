@@ -1,54 +1,57 @@
 <template>
-  <div ref="root" class="ost-product-combo">
+  <div ref="root" class="ost-project-combo">
     <button
       ref="trigger"
       type="button"
-      class="ost-product-combo__button ost-hit"
+      class="ost-project-combo__button ost-hit"
       :class="{ 'is-open': open }"
       aria-haspopup="listbox"
       :aria-expanded="open"
-      data-cy="ost-product-combo"
+      data-cy="ost-project-combo"
       @click="open = !open"
       @keydown.down.prevent="openAndFocus(0)"
+      @keydown.esc="close()"
     >
-      <span class="ost-product-combo__label" data-cy="ost-product-combo-label">{{ current ? current.title : 'All products' }}</span>
-      <span class="ost-product-combo__meta">{{ current ? nodeCount(current.id) : branchCount }}</span>
-      <PhCaretDown :size="12" class="ost-product-combo__caret" aria-hidden="true" />
+      <span class="ost-project-combo__label" data-cy="ost-project-combo-label">{{ current ? current.title : 'All projects' }}</span>
+      <span class="ost-project-combo__meta">{{ current ? nodeCount(current.nodes) : projectCount }}</span>
+      <PhCaretDown :size="12" class="ost-project-combo__caret" aria-hidden="true" />
     </button>
-    <div v-if="open" class="ost-product-combo__menu" role="listbox" aria-label="Scope the canvas" @keydown="onMenuKey">
+    <div v-if="open" class="ost-project-combo__menu" role="listbox" aria-label="Focus the canvas on a project" @keydown="onMenuKey">
       <button
         ref="options"
         type="button"
         role="option"
-        class="ost-product-combo__option"
-        :class="{ 'is-on': productId === 'all' }"
-        :aria-selected="productId === 'all'"
-        data-cy="ost-product-option-all"
+        class="ost-project-combo__option"
+        :class="{ 'is-on': projectId === 'all' }"
+        :aria-selected="projectId === 'all'"
+        data-cy="ost-project-option-all"
         @click="choose('all')"
       >
-        <span class="ost-product-combo__box" :class="{ 'is-on': productId === 'all' }">
-          <PhCheck v-if="productId === 'all'" :size="11" aria-hidden="true" />
+        <span class="ost-project-combo__box" :class="{ 'is-on': projectId === 'all' }">
+          <PhCheck v-if="projectId === 'all'" :size="11" aria-hidden="true" />
         </span>
-        <span class="ost-product-combo__name">All products</span>
-        <span class="ost-product-combo__aside">{{ branchCount }}</span>
+        <span class="ost-project-combo__name">All projects</span>
+        <span class="ost-project-combo__aside">{{ projectCount }}</span>
       </button>
-      <i class="ost-product-combo__rule" aria-hidden="true"></i>
+      <i class="ost-project-combo__rule" aria-hidden="true"></i>
       <button
-        v-for="product in products"
-        :key="product.id"
+        v-for="project in projects"
+        :key="project.id"
         ref="options"
         type="button"
         role="option"
-        class="ost-product-combo__option"
-        :class="{ 'is-on': productId === product.id }"
-        :aria-selected="productId === product.id"
-        :data-cy="`ost-product-option-${product.id}`"
-        @click="choose(product.id)"
+        class="ost-project-combo__option"
+        :class="{ 'is-on': projectId === project.id }"
+        :aria-selected="projectId === project.id"
+        :style="{ paddingLeft: `${OPTION_PAD + Math.min(project.depth, MAX_INDENT_LEVELS) * INDENT}px` }"
+        :data-cy="`ost-project-option-${project.id}`"
+        :data-depth="project.depth"
+        @click="choose(project.id)"
       >
-        <span class="ost-product-combo__radio" :class="{ 'is-on': productId === product.id }" aria-hidden="true"></span>
-        <span class="ost-product-combo__text">
-          <span class="ost-product-combo__name">{{ product.title }}</span>
-          <span class="ost-product-combo__sub">{{ nodeCount(product.id) }}</span>
+        <span class="ost-project-combo__radio" :class="{ 'is-on': projectId === project.id }" aria-hidden="true"></span>
+        <span class="ost-project-combo__text">
+          <span class="ost-project-combo__name">{{ project.title }}</span>
+          <span class="ost-project-combo__sub">{{ project.depth ? 'Sub-project · ' : '' }}{{ nodeCount(project.nodes) }}</span>
         </span>
       </button>
     </div>
@@ -56,26 +59,38 @@
 </template>
 
 <script setup lang="ts">
-/** Product scope combo: "All products" (checkbox row) or one product branch (radio rows). */
+/**
+ * Project focus combo: "All projects" (checkbox row) or one project (radio rows). The rows come in
+ * tree order and are indented by how deep the project is nested, so the list reads as the project
+ * outline; choosing a project, top-level or nested, shows that project's subtree on the canvas.
+ */
 import { PhCaretDown, PhCheck } from '@phosphor-icons/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import type { OstNode } from '../domain/types';
+/** A row of the list: `depth` 0 is a top-level project, `nodes` counts everything below the project. */
+export interface ProjectRow {
+  id: string;
+  title: string;
+  depth: number;
+  nodes: number;
+}
 
-const props = defineProps<{ products: OstNode[]; productId: string | 'all'; counts: Record<string, number> }>();
-const emit = defineEmits<{ select: [productId: string | 'all'] }>();
+const props = defineProps<{ projects: ProjectRow[]; projectId: string | 'all' }>();
+const emit = defineEmits<{ select: [projectId: string | 'all'] }>();
 
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 const trigger = ref<HTMLButtonElement | null>(null);
 const options = ref<HTMLButtonElement[]>([]);
 
-const current = computed(() => (props.productId === 'all' ? null : (props.products.find(p => p.id === props.productId) ?? null)));
-const branchCount = computed(() => `${props.products.length} branch${props.products.length === 1 ? '' : 'es'}`);
-const nodeCount = (key: string) => {
-  const n = props.counts[key] ?? 0;
-  return `${n} node${n === 1 ? '' : 's'}`;
-};
+const current = computed(() => (props.projectId === 'all' ? null : (props.projects.find(p => p.id === props.projectId) ?? null)));
+const projectCount = computed(() => `${props.projects.length} project${props.projects.length === 1 ? '' : 's'}`);
+const nodeCount = (n: number) => `${n} node${n === 1 ? '' : 's'}`;
+
+/** Left padding of a row (px), and what each level of nesting adds; deep nesting stops indenting. */
+const OPTION_PAD = 9;
+const INDENT = 16;
+const MAX_INDENT_LEVELS = 8;
 
 async function openAndFocus(index: number) {
   open.value = true;
@@ -88,9 +103,9 @@ function close(returnFocus = false) {
   if (returnFocus) trigger.value?.focus();
 }
 
-function choose(productId: string | 'all') {
+function choose(projectId: string | 'all') {
   close(true);
-  emit('select', productId);
+  emit('select', projectId);
 }
 
 function onMenuKey(event: KeyboardEvent) {
@@ -117,11 +132,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 </script>
 
 <style scoped>
-.ost-product-combo {
+.ost-project-combo {
   position: relative;
 }
 
-.ost-product-combo__button {
+.ost-project-combo__button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -133,38 +148,44 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   border: 1px solid var(--color-neutral-800);
   background: transparent;
 }
-.ost-product-combo__button.is-open {
+.ost-project-combo__button.is-open {
   border-color: var(--color-accent-600);
   background: var(--color-accent-900);
 }
 
-.ost-product-combo__label {
+.ost-project-combo__label {
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
 }
 
-.ost-product-combo__meta,
-.ost-product-combo__aside {
+.ost-project-combo__meta,
+.ost-project-combo__aside {
   font-size: 11px;
   color: var(--color-neutral-400);
   white-space: nowrap;
 }
 
-.ost-product-combo__aside {
+.ost-project-combo__aside {
   margin-left: auto;
 }
 
-.ost-product-combo__caret {
+.ost-project-combo__caret {
   opacity: 0.7;
   margin-left: 2px;
 }
 
-.ost-product-combo__menu {
+.ost-project-combo__menu {
   position: absolute;
   left: 0;
   top: calc(100% + 6px);
   min-width: 232px;
+  max-width: min(420px, 90vw);
+  max-height: min(60vh, 440px);
+  overflow-y: auto;
   z-index: 70;
   padding: 5px;
   background: var(--color-surface);
@@ -176,11 +197,12 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   gap: 2px;
 }
 
-.ost-product-combo__option {
+.ost-project-combo__option {
   display: flex;
   align-items: center;
   gap: 9px;
   width: 100%;
+  flex: none;
   padding: 7px 9px;
   font: inherit;
   color: var(--color-text);
@@ -190,14 +212,14 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   border: 1px solid transparent;
   background: transparent;
 }
-.ost-product-combo__option:hover {
+.ost-project-combo__option:hover {
   background: color-mix(in srgb, var(--color-text) 7%, transparent);
 }
-.ost-product-combo__option.is-on {
+.ost-project-combo__option.is-on {
   background: var(--color-accent-900);
 }
 
-.ost-product-combo__box {
+.ost-project-combo__box {
   width: 15px;
   height: 15px;
   flex: none;
@@ -208,43 +230,44 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   background: transparent;
   color: var(--color-bg);
 }
-.ost-product-combo__box.is-on {
+.ost-project-combo__box.is-on {
   border-color: var(--color-accent-400);
   background: var(--color-accent-400);
 }
 
-.ost-product-combo__radio {
+.ost-project-combo__radio {
   width: 15px;
   height: 15px;
   flex: none;
   border-radius: 50%;
   border: 1px solid var(--color-neutral-600);
 }
-.ost-product-combo__radio.is-on {
+.ost-project-combo__radio.is-on {
   border-color: var(--color-accent-400);
   box-shadow:
     inset 0 0 0 3px var(--color-surface),
     inset 0 0 0 9px var(--color-accent-400);
 }
 
-.ost-product-combo__rule {
+.ost-project-combo__rule {
   height: 1px;
   background: var(--color-neutral-800);
   margin: 3px 8px;
 }
 
-.ost-product-combo__text {
+.ost-project-combo__text {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-width: 0;
 }
 
-.ost-product-combo__name {
+.ost-project-combo__name {
   font-size: 13px;
   font-weight: 500;
 }
 
-.ost-product-combo__sub {
+.ost-project-combo__sub {
   font-size: 10.5px;
   color: var(--color-neutral-400);
 }

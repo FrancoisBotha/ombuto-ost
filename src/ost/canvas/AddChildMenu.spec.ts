@@ -23,7 +23,7 @@ describe('AddChildMenu', () => {
   });
 
   const cases: [NodeType, string[]][] = [
-    ['product', ['Outcome']],
+    ['project', ['Outcome', 'Project']],
     ['outcome', ['Opportunity']],
     ['opportunity', ['Opportunity', 'Solution', 'Evidence']],
     ['solution', ['Assumption']],

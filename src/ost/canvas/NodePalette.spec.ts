@@ -51,9 +51,10 @@ describe('NodePalette', () => {
 
   it('lists every creatable type with its hint', () => {
     const labels = wrapper.findAll('.ost-palette__label').map(l => l.text());
-    expect(labels).toEqual(['Outcome', 'Opportunity', 'Solution', 'Assumption', 'Evidence']);
+    expect(labels).toEqual(['Project', 'Outcome', 'Opportunity', 'Solution', 'Assumption', 'Evidence']);
     expect(tool('evidence').text()).toContain('Customer evidence goes under an opportunity; test results under an assumption.');
-    expect(wrapper.find('[data-cy="ost-palette-product"]').exists()).toBe(false);
+    // A palette project goes under a project; the toolbar's "+ Project" is the one way to a top-level one.
+    expect(tool('project').text()).toContain('Attach under a project. For a top-level project use “+ Project” above.');
   });
 
   describe('click to arm', () => {

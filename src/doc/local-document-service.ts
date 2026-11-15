@@ -180,16 +180,9 @@ export default class LocalDocumentService {
     return this.write(() => {
       const doc = this.require();
       const type = this.type(request.type);
-      let parentId: number | null = null;
-      if (type === 'product') {
-        if (request.parentId !== null || request.parentType !== null) throw new RuleError('invalidparent');
-      } else {
-        if (request.parentType === null || request.parentId === null) throw new RuleError('parentmissing');
-        const parent = this.find(this.type(request.parentType), request.parentId, 'parentmissing');
-        if (!ALLOWED[parent.type].includes(type)) throw new RuleError('invalidparent');
-        if (this.depth(parent) + 1 > MAX_DEPTH) throw new RuleError('toodeep');
-        parentId = parent.id;
-      }
+      const parent = this.parent(type, request.parentType, request.parentId);
+      if (parent && this.depth(parent) + 1 > MAX_DEPTH) throw new RuleError('toodeep');
+      const parentId = parent?.id ?? null;
       if (doc.nodes.length >= MAX_NODES) throw new RuleError('toomanynodes');
       const title = request.title?.trim() ? this.title(type, request.title) : defaultTitle(type);
       const last = this.siblings(type, parentId).at(-1);
@@ -259,25 +252,22 @@ export default class LocalDocumentService {
 
   /**
    * Moves a node under a new parent, or reorders it among its siblings (`position` is a zero-based
-   * index among the same-type children of the target; omitted = last). Products have no parent:
-   * `parentId: null` reorders them. Both affected sibling groups are renumbered.
+   * index among the same-type children of the target; omitted = last). `parentId: null` is the top
+   * level, where only projects live: it reorders the top-level projects, and moves a sub-project
+   * out to the top. Both affected sibling groups are renumbered.
    */
   moveNode(request: MoveNodeRequest): Promise<MoveNodeResponse> {
     return this.write(() => {
       const node = this.find(this.type(request.nodeType), request.nodeId);
       const { position } = request;
       if (position !== undefined && (!Number.isInteger(position) || position < 0)) throw new RuleError('invalidposition');
-      let newParentId: number | null = null;
-      if (node.type === 'product') {
-        if (request.parentId !== null || request.parentType !== null) throw new RuleError('invalidparent');
-      } else {
-        if (request.parentType === null || request.parentId === null) throw new RuleError('parentmissing');
-        const parent = this.find(this.type(request.parentType), request.parentId, 'parentmissing');
-        if (!ALLOWED[parent.type].includes(node.type)) throw new RuleError('invalidparent');
+      const parent = this.parent(node.type, request.parentType, request.parentId);
+      if (parent) {
+        // A project may go under any project except itself and the projects inside it.
         if (parent.id === node.id || this.subtreeIds(node.id).has(parent.id)) throw new RuleError('cycle');
         if (parent.id !== node.parentId && this.depth(parent) + this.height(node.id) > MAX_DEPTH) throw new RuleError('toodeep');
-        newParentId = parent.id;
       }
+      const newParentId = parent?.id ?? null;
       const oldParentId = node.parentId;
       const reparented = oldParentId !== newParentId;
       node.parentId = newParentId;
@@ -427,6 +417,21 @@ export default class LocalDocumentService {
     return node;
   }
 
+  /**
+   * The parent a node of `type` is asked to go under, checked against the allowed parent -> child
+   * matrix. Null is the top level, where only a project may be.
+   */
+  private parent(type: NodeType, parentType: ApiNodeType | null, parentId: number | null): DocNode | null {
+    if (parentType === null && parentId === null) {
+      if (type !== 'project') throw new RuleError('parentmissing');
+      return null;
+    }
+    if (parentType === null || parentId === null) throw new RuleError(type === 'project' ? 'invalidparent' : 'parentmissing');
+    const parent = this.find(this.type(parentType), parentId, 'parentmissing');
+    if (!ALLOWED[parent.type].includes(type)) throw new RuleError('invalidparent');
+    return parent;
+  }
+
   private findLink(linkId: number) {
     for (const node of this.require().nodes) {
       const link = node.links.find(l => l.id === linkId);
@@ -443,7 +448,7 @@ export default class LocalDocumentService {
     throw new RuleError('questionmissing');
   }
 
-  /** Same-type children of one parent (products: every product), in order. */
+  /** Same-type children of one parent (`null`: the top-level projects), in order. */
   private siblings(type: NodeType, parentId: number | null): DocNode[] {
     return this.require()
       .nodes.filter(n => n.type === type && n.parentId === parentId)
@@ -498,7 +503,7 @@ export default class LocalDocumentService {
     return text;
   }
 
-  /** Levels from the product down to `node`, both included (a product is 1). */
+  /** Levels from the top-level project down to `node`, both included (a top-level project is 1). */
   private depth(node: DocNode): number {
     const byId = new Map(this.require().nodes.map(n => [n.id, n]));
     let depth = 1;

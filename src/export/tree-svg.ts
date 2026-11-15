@@ -52,7 +52,7 @@ const TITLE_GAP = 6;
 const TITLE_SIZE = 15;
 const TITLE_LINE = 17.7;
 /** Types with a two-line meta row get two title lines, the others three (as on the canvas). */
-const TITLE_LINES: Record<NodeType, number> = { product: 2, outcome: 3, opportunity: 3, solution: 2, assumption: 2, evidence: 3 };
+const TITLE_LINES: Record<NodeType, number> = { project: 2, outcome: 3, opportunity: 3, solution: 2, assumption: 2, evidence: 3 };
 const META_GAP = 6;
 const ITEM_GAP = 5;
 const BADGE: FontSpec = { size: 10, weight: 400, letterSpacing: 0.6 };
@@ -103,7 +103,7 @@ interface Frame {
 
 const frameOf = (type: NodeType, p: ExportPalette): Frame =>
   ({
-    product: { fill: p.accent[900], stroke: p.accent[700] },
+    project: { fill: p.accent[900], stroke: p.accent[700] },
     outcome: { fill: p.accent[900], stroke: p.accent[600] },
     opportunity: { fill: p.surface, stroke: p.accent[500] },
     solution: { fill: p.neutral[900], stroke: p.neutral[700] },
@@ -154,7 +154,7 @@ function planNode(node: OstNode, placed: Placed, measure: MeasureText): NodePlan
   let badge: NodePlan['badge'] = null;
   let metricLines: string[] = [];
   let money: number | null = null;
-  if (node.type !== 'product') {
+  if (node.type !== 'project') {
     if (node.status) {
       const label = node.status.toUpperCase();
       badge = { label, w: Math.min(innerW, textWidth(label, BADGE, measure) + 2 * BADGE_PAD_X + 2 * BORDER) };
@@ -168,7 +168,7 @@ function planNode(node: OstNode, placed: Placed, measure: MeasureText): NodePlan
     }
   }
   const metaH = Math.max(badge ? BADGE_H : 0, metricLines.length * METRIC_LINE, money === null ? 0 : MONEY_H);
-  const content = KICKER_LINE + TITLE_GAP + titleLines.length * TITLE_LINE + (node.type === 'product' ? 0 : META_GAP + metaH);
+  const content = KICKER_LINE + TITLE_GAP + titleLines.length * TITLE_LINE + (node.type === 'project' ? 0 : META_GAP + metaH);
   const h = Math.max(placed.h, Math.ceil(2 * BORDER + PAD_TOP + content + PAD_BOTTOM));
   return { node, x: placed.x - placed.w / 2, y: placed.y, w: placed.w, h, titleLines, titleFont, badge, metricLines, money, metaH };
 }
@@ -217,9 +217,9 @@ function drawNode(plan: NodePlan, p: ExportPalette): string {
   ];
 
   const blockH = KICKER_LINE + TITLE_GAP + plan.titleLines.length * TITLE_LINE;
-  // A product's label and title sit in the middle of the box; every other type starts at the top.
+  // A project's label and title sit in the middle of the box; every other type starts at the top.
   const blockTop =
-    node.type === 'product' ? y + BORDER + PAD_TOP + (h - 2 * BORDER - PAD_TOP - PAD_BOTTOM - blockH) / 2 : y + BORDER + PAD_TOP;
+    node.type === 'project' ? y + BORDER + PAD_TOP + (h - 2 * BORDER - PAD_TOP - PAD_BOTTOM - blockH) / 2 : y + BORDER + PAD_TOP;
   parts.push(
     textEl(left, baseline(blockTop, KICKER_LINE, KICKER.size), KICKER, escapeXml(TYPE_BOX[node.type].label.toUpperCase()), {
       fill: p.text,
@@ -275,7 +275,7 @@ function drawNode(plan: NodePlan, p: ExportPalette): string {
 }
 
 /**
- * Draws the whole tree under `rootIds` (every product of the view, nothing collapsed) as a
+ * Draws the whole tree under `rootIds` (every project of the view, nothing collapsed) as a
  * standalone SVG document. Returns null when there is nothing to draw.
  */
 export function treeToSvg(nodes: OstNode[], rootIds: string[], options: TreeSvgOptions = {}): TreeSvg | null {

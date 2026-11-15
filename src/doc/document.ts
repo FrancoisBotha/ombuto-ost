@@ -1,17 +1,22 @@
 /*
- * The `.ost` document: one file holds one tree (which may contain several products).
+ * The `.ost` document: one file holds one tree (which may contain several projects, and projects
+ * inside projects).
  *
  * The file is pretty-printed JSON so it diffs well and reads easily, for people and for AI agents:
  *
- *   { "format": "ombuto-ost", "version": 1, "name": "…", "nodes": [ { "id": 1, "type": "product", … } ] }
+ *   { "format": "ombuto-ost", "version": 1, "name": "…", "nodes": [ { "id": 1, "type": "project", … } ] }
  *
  * Opening a file is strict: `parseDocument` checks every value and rebuilds a clean object from the
  * known fields only, so nothing unexpected from a file ever reaches the app. File content is only
  * ever shown as text.
+ *
+ * Files from the first published build call a project a "product": see legacy.ts.
  */
 import { TITLE_MIN, titleMax } from '@/ost/canvas/edit-rules';
 import { ALLOWED, STATUS } from '@/ost/domain/rules';
 import { NODE_TYPES, type NodeType } from '@/ost/domain/types';
+
+import { currentNodeType } from './legacy';
 
 export const DOCUMENT_FORMAT = 'ombuto-ost';
 export const DOCUMENT_VERSION = 1;
@@ -34,8 +39,8 @@ export const MAX_QUESTIONS_PER_NODE = 200;
  */
 export const MAX_NODES = 1000;
 /**
- * The deepest a tree may be, counting the product as level 1. Only opportunities nest, and real
- * trees stay well under 20 levels; the cap keeps every walk over the tree far from the call-stack
+ * The deepest a tree may be, counting the top-level project as level 1. Only projects and
+ * opportunities nest, and real trees stay well under 20 levels; the cap keeps every walk over the tree far from the call-stack
  * limit and the canvas a size that can be drawn.
  */
 export const MAX_DEPTH = 64;
@@ -61,7 +66,7 @@ export interface DocNode {
   /** Unique in the file, across every node type. */
   id: number;
   type: NodeType;
-  /** null for products only. */
+  /** null for a top-level project; a sub-project names its parent project. */
   parentId: number | null;
   title: string;
   notes: string;
@@ -75,7 +80,7 @@ export interface DocNode {
   valueRating: number | null;
   /** assumptions only: free text; null when unassigned or not applicable. */
   owner: string | null;
-  /** Order among siblings of the same type under one parent (products: among products). */
+  /** Order among siblings of the same type under one parent (top-level projects: among each other). */
   sortOrder: number;
   createdDate: string | null;
   lastModifiedDate: string | null;
@@ -254,16 +259,18 @@ function requireUnset(value: unknown, where: string, field: string, type: NodeTy
 
 function readNode(raw: unknown, index: number, linkIds: Set<number>, questionIds: Set<number>): DocNode {
   if (!isRecord(raw)) fail(`entry ${index + 1} of "nodes"`, 'is not an object');
-  const { id, type } = raw;
+  const { id } = raw;
+  // The one place a file's type name is read: "product" from the first published build is a project.
+  const type = currentNodeType(raw.type);
   if (!isId(id)) fail(`entry ${index + 1} of "nodes"`, 'has no valid id');
   const where = `node ${id}`;
   if (typeof type !== 'string' || !NODE_TYPES.includes(type as NodeType)) fail(where, 'has an unknown type');
   const nodeType = type as NodeType;
 
   const parentId = raw.parentId ?? null;
-  if (nodeType === 'product' ? parentId !== null : !isId(parentId)) {
-    fail(where, nodeType === 'product' ? 'is a product but has a parent' : 'has no valid parentId');
-  }
+  // Only a project may be at the top of the tree (no parent). What a parent may hold is checked
+  // once every node is known (ALLOWED, in validateDocument).
+  if (parentId !== null ? !isId(parentId) : nodeType !== 'project') fail(where, 'has no valid parentId');
 
   const title = typeof raw.title === 'string' ? raw.title.trim() : '';
   if (title.length < TITLE_MIN || title.length > titleMax(nodeType)) {
@@ -357,8 +364,9 @@ export function validateDocument(value: unknown): OstDocument {
     if (!parent) fail(`node ${n.id}`, `refers to a parent (${n.parentId}) that is not in the file`);
     if (!ALLOWED[parent.type].includes(n.type)) fail(`node ${n.id}`, `is a ${n.type} under a ${parent.type}, which is not allowed`);
   }
-  // Every node must reach a product, within MAX_DEPTH levels. The type matrix already rules out
-  // every loop except one made of opportunities, which would otherwise hang off nothing.
+  // Every node must reach a top-level project, within MAX_DEPTH levels. The type matrix already
+  // rules out every loop except one made of projects or one made of opportunities, which would
+  // otherwise hang off nothing.
   const depths = new Map<number, number>();
   for (const start of nodes) {
     const trail: DocNode[] = [];
@@ -370,7 +378,7 @@ export function validateDocument(value: unknown): OstDocument {
       trail.push(current);
       current = byId.get(current.parentId);
     }
-    // `current` is a product, or a node whose depth is already known.
+    // `current` is a top-level project, or a node whose depth is already known.
     let depth = current ? (depths.get(current.id) ?? 1) : 1;
     if (current) depths.set(current.id, depth);
     for (let i = trail.length - 1; i >= 0; i--) depths.set(trail[i].id, ++depth);

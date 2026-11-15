@@ -13,7 +13,7 @@ export const MIN_PNG_SCALE = 0.5;
 export const MAX_CANVAS_SIDE = 16384;
 export const MAX_CANVAS_AREA = 32_000_000;
 
-const TOO_LARGE = 'This tree is too large to export as a PNG image. Export it as SVG instead, or choose a single product.';
+const TOO_LARGE = 'This tree is too large to export as a PNG image. Export it as SVG instead, or choose a single project.';
 const NOT_DRAWN = 'The PNG image could not be drawn. Try the SVG export instead.';
 
 /**

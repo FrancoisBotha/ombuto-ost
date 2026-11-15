@@ -20,7 +20,7 @@ import { NODE_TYPES } from './types';
 describe('OST rules', () => {
   it('permits exactly the parent -> child matrix', () => {
     expect(ALLOWED).toEqual({
-      product: ['outcome'],
+      project: ['outcome', 'project'],
       outcome: ['opportunity'],
       opportunity: ['opportunity', 'solution', 'evidence'],
       solution: ['assumption'],
@@ -41,7 +41,7 @@ describe('OST rules', () => {
   });
 
   it('gives statuses only to opportunities, solutions and assumptions, split into three voices', () => {
-    expect(STATUS.product).toEqual([]);
+    expect(STATUS.project).toEqual([]);
     expect(STATUS.outcome).toEqual([]);
     expect(STATUS.evidence).toEqual([]);
     expect(STATUS.opportunity[0]).toBe('unexplored');
@@ -111,8 +111,28 @@ describe('OST rules', () => {
     expect(canReparent('solution-1', 'opportunity-2', nodes)).toBe(true);
     expect(canReparent('evidence-1', 'assumption-1', nodes)).toBe(true);
     expect(canReparent('evidence-1', 'solution-1', nodes)).toBe(false); // evidence not under solutions
-    expect(canReparent('outcome-1', 'product-2', nodes)).toBe(true);
-    expect(canReparent('opportunity-2', 'product-2', nodes)).toBe(false);
-    expect(canReparent('missing', 'product-2', [...nodes, node('product-9', null)])).toBe(false);
+    expect(canReparent('outcome-1', 'project-2', nodes)).toBe(true);
+    expect(canReparent('opportunity-2', 'project-2', nodes)).toBe(false);
+    expect(canReparent('missing', 'project-2', [...nodes, node('project-9', null)])).toBe(false);
+  });
+
+  it('lets a project nest under another project, but never under itself or one of its own sub-projects', () => {
+    // project-1 > project-2 > project-3 > outcome-1; project-4 stands alone
+    const nodes = [
+      node('project-1', null),
+      node('project-2', 'project-1'),
+      node('project-3', 'project-2'),
+      node('outcome-1', 'project-3'),
+      node('project-4', null),
+    ];
+    expect(canReparent('project-4', 'project-3', nodes)).toBe(true);
+    expect(canReparent('project-1', 'project-4', nodes)).toBe(true); // a top-level project, subtree and all
+    expect(canReparent('project-3', 'project-1', nodes)).toBe(true);
+    expect(canReparent('outcome-1', 'project-4', nodes)).toBe(true);
+    expect(canReparent('project-1', 'project-1', nodes)).toBe(false);
+    expect(canReparent('project-1', 'project-2', nodes)).toBe(false); // its own sub-project
+    expect(canReparent('project-1', 'project-3', nodes)).toBe(false); // deeper in its own subtree
+    expect(canReparent('project-2', 'project-1', nodes)).toBe(false); // already there
+    expect(canReparent('project-4', 'outcome-1', nodes)).toBe(false); // only a project holds a project
   });
 });

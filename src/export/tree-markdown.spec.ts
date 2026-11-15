@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { MAX_DEPTH } from '@/doc/document';
 import { node, sampleNodes } from '@/ost/domain/fixtures.test-util';
 
 import { escapeInline, linkItem, noteLines, treeToMarkdown } from './tree-markdown';
@@ -11,16 +12,16 @@ const outline = (...args: Parameters<typeof treeToMarkdown>): string => {
 };
 
 describe('treeToMarkdown', () => {
-  it('returns null when there is no product to write', () => {
+  it('returns null when there is no project to write', () => {
     expect(treeToMarkdown('Tree', [], [])).toBeNull();
     expect(treeToMarkdown('Tree', sampleNodes(), [])).toBeNull();
-    expect(treeToMarkdown('Tree', sampleNodes(), ['product-404'])).toBeNull();
+    expect(treeToMarkdown('Tree', sampleNodes(), ['project-404'])).toBeNull();
   });
 
-  it('writes the whole outline: a heading per product and a nested bullet per node', () => {
+  it('writes the whole outline: a heading per project and a nested bullet per node', () => {
     const nodes = [
-      node('product-1', null, { title: 'Meal planner', note: 'The product.' }),
-      node('outcome-1', 'product-1', { title: 'More weekly plans' }),
+      node('project-1', null, { title: 'Meal planner', note: 'The project.' }),
+      node('outcome-1', 'project-1', { title: 'More weekly plans' }),
       node('opportunity-1', 'outcome-1', {
         title: 'Deciding takes too long',
         status: 'exploring',
@@ -37,18 +38,19 @@ describe('treeToMarkdown', () => {
       node('assumption-1', 'solution-1', { title: 'People accept suggestions', status: 'supported', conf: 60, owner: 'Research' }),
       node('assumption-2', 'solution-1', { title: 'Meals are logged', status: 'untested', conf: 40 }),
       node('evidence-1', 'assumption-1', { title: '5 of 8 kept four' }),
-      node('product-2', null, { title: 'Second product' }),
+      node('project-2', null, { title: 'Second project' }),
     ];
-    expect(outline('My tree', nodes, ['product-1', 'product-2'])).toBe(
+    expect(outline('My tree', nodes, ['project-1', 'project-2'])).toBe(
       [
         '# My tree',
         '',
-        'An Opportunity Solution Tree: product → outcome → opportunity → solution → assumption → evidence.',
+        'An Opportunity Solution Tree: project → outcome → opportunity → solution → assumption → evidence.',
+        'Each heading is a project. A project inside another project has a deeper heading and a "Sub-project of" line naming the projects it sits in.',
         'Each bullet is one node and the bullets nested under it are its children; quoted text is the notes of the node.',
         '',
-        '## Product: Meal planner',
+        '## Project: Meal planner',
         '',
-        '> The product.',
+        '> The project.',
         '',
         '- **Outcome:** More weekly plans',
         '  - **Opportunity:** Deciding takes too long — status: exploring · priority: 82/100 (High) · value: 4/5 (Strong)',
@@ -63,48 +65,138 @@ describe('treeToMarkdown', () => {
         '        - **Evidence:** 5 of 8 kept four',
         '      - **Assumption:** Meals are logged — status: untested · confidence: 40%',
         '',
-        '## Product: Second product',
+        '## Project: Second project',
         '',
       ].join('\n'),
     );
   });
 
-  it('writes only the products of the current view', () => {
-    const text = outline('Tree', sampleNodes(), ['product-2']);
-    expect(text).toContain('## Product: Title product-2');
-    expect(text).not.toContain('product-1');
+  describe('projects inside projects', () => {
+    /** App > (Own outcome, Planner > (Plan more > Deciding, Favourites > Remember), Shopping); Other. In tree order. */
+    const nested = () => [
+      node('project-1', null, { title: 'App', note: 'Top.' }),
+      node('outcome-1', 'project-1', { title: 'Own outcome' }),
+      node('project-2', 'project-1', { title: 'Planner' }),
+      node('outcome-2', 'project-2', { title: 'Plan more' }),
+      node('opportunity-1', 'outcome-2', { title: 'Deciding', status: 'exploring' }),
+      node('project-3', 'project-2', { title: 'Favourites', note: 'Deep.' }),
+      node('outcome-3', 'project-3', { title: 'Remember' }),
+      node('project-4', 'project-1', { title: 'Shopping', sortOrder: 1 }),
+      node('project-5', null, { title: 'Other', sortOrder: 1 }),
+    ];
+
+    it('gives every project a heading, one level deeper per level of nesting, and says what it sits in', () => {
+      const text = outline('Tree', nested(), ['project-1', 'project-5']);
+      expect(text.split('\n').slice(6).join('\n')).toBe(
+        [
+          '## Project: App',
+          '',
+          '> Top.',
+          '',
+          '- **Outcome:** Own outcome',
+          '',
+          '### Project: Planner',
+          '',
+          'Sub-project of: App',
+          '',
+          '- **Outcome:** Plan more',
+          '  - **Opportunity:** Deciding — status: exploring · priority: 50/100 (Medium) · value: 3/5 (Solid)',
+          '',
+          '#### Project: Favourites',
+          '',
+          'Sub-project of: App › Planner',
+          '',
+          '> Deep.',
+          '',
+          '- **Outcome:** Remember',
+          '',
+          '### Project: Shopping',
+          '',
+          'Sub-project of: App',
+          '',
+          '## Project: Other',
+          '',
+        ].join('\n'),
+      );
+    });
+
+    it("lists a project's own outcomes before its sub-projects, so no bullet is read as part of a sub-project", () => {
+      // Handed over with the sub-project first: the outline still starts with the project's own outcome.
+      const [app, own, ...rest] = nested();
+      const text = outline('Tree', [app, ...rest, own], ['project-1']);
+      expect(text.indexOf('- **Outcome:** Own outcome')).toBeGreaterThan(text.indexOf('## Project: App'));
+      expect(text.indexOf('- **Outcome:** Own outcome')).toBeLessThan(text.indexOf('### Project: Planner'));
+    });
+
+    it('a focused sub-project is the top of its outline, and still says where it sits', () => {
+      const text = outline('Tree', nested(), ['project-2']);
+      expect(text).toContain('\n## Project: Planner\n\nSub-project of: App\n');
+      expect(text).toContain('\n### Project: Favourites\n\nSub-project of: App › Planner\n');
+      expect(text).toContain('- **Outcome:** Remember');
+      for (const outside of ['Own outcome', 'Shopping', 'Other', 'Top.']) expect(text, outside).not.toContain(outside);
+    });
+
+    it('stops at the deepest heading Markdown has; the "Sub-project of" line keeps the nesting unambiguous', () => {
+      const chain = Array.from({ length: 8 }, (_, i) => node(`project-${i + 1}`, i ? `project-${i}` : null, { title: `P${i + 1}` }));
+      const text = outline('Tree', chain, ['project-1']);
+      expect(text).toContain('\n###### Project: P5\n\nSub-project of: P1 › P2 › P3 › P4\n');
+      expect(text).toContain('\n###### Project: P8\n\nSub-project of: P1 › P2 › P3 › P4 › P5 › P6 › P7\n');
+      expect(text).not.toContain('#######');
+    });
+
+    it('escapes project titles in the "Sub-project of" line too', () => {
+      const nodes = [node('project-1', null, { title: '*Bold* <b>app</b>' }), node('project-2', 'project-1', { title: 'Inner' })];
+      expect(outline('Tree', nodes, ['project-1'])).toContain('Sub-project of: \\*Bold\\* \\<b\\>app\\</b\\>\n');
+    });
+
+    it('writes the deepest chain of projects a tree can hold', () => {
+      const chain = Array.from({ length: MAX_DEPTH }, (_, i) =>
+        node(`project-${i + 1}`, i ? `project-${i}` : null, { title: `P${i + 1}` }),
+      );
+      const text = outline('Tree', chain, ['project-1']);
+      expect(text.match(/^#{2,6} Project: /gm)).toHaveLength(MAX_DEPTH);
+      expect(text).toContain(`###### Project: P${MAX_DEPTH}
+
+Sub-project of: P1 › P2 › `);
+    });
+  });
+
+  it('writes only the projects of the current view', () => {
+    const text = outline('Tree', sampleNodes(), ['project-2']);
+    expect(text).toContain('## Project: Title project-2');
+    expect(text).not.toContain('project-1');
     expect(text).not.toContain('- **');
   });
 
-  it('puts the links of a product under its notes, apart from them', () => {
+  it('puts the links of a project under its notes, apart from them', () => {
     const nodes = [
-      node('product-1', null, { note: 'Notes', links: [{ id: 1, name: 'Site', url: 'https://example.com' }] }),
-      node('outcome-1', 'product-1'),
+      node('project-1', null, { note: 'Notes', links: [{ id: 1, name: 'Site', url: 'https://example.com' }] }),
+      node('outcome-1', 'project-1'),
     ];
-    expect(outline('Tree', nodes, ['product-1'])).toContain(
+    expect(outline('Tree', nodes, ['project-1'])).toContain(
       ['> Notes', '', '- Links:', '  - [Site](https://example.com)', '- **Outcome:** Title outcome-1'].join('\n'),
     );
   });
 
   it('leaves out the evidence strength of a solution with no assumptions', () => {
     const nodes = [
-      node('product-1', null),
-      node('outcome-1', 'product-1'),
+      node('project-1', null),
+      node('outcome-1', 'project-1'),
       node('opportunity-1', 'outcome-1', { status: 'parked' }),
       node('solution-1', 'opportunity-1', { status: 'candidate' }),
     ];
-    expect(outline('Tree', nodes, ['product-1'])).toContain('- **Solution:** Title solution-1 — status: candidate\n');
+    expect(outline('Tree', nodes, ['project-1'])).toContain('- **Solution:** Title solution-1 — status: candidate\n');
   });
 
   it('keeps a title on one line and escapes what would be read as Markdown or HTML', () => {
     const nodes = [
-      node('product-1', null, { title: '# Not a heading\n## still not' }),
-      node('outcome-1', 'product-1', { title: '**bold** _em_ `code` [link](http://x) <script>alert(1)</script> ~~gone~~ &amp; \\' }),
+      node('project-1', null, { title: '# Not a heading\n## still not' }),
+      node('outcome-1', 'project-1', { title: '**bold** _em_ `code` [link](http://x) <script>alert(1)</script> ~~gone~~ &amp; \\' }),
     ];
-    const text = outline('Doc *name*\n# second', nodes, ['product-1']);
+    const text = outline('Doc *name*\n# second', nodes, ['project-1']);
     const lines = text.split('\n');
     expect(lines[0]).toBe('# Doc \\*name\\* # second');
-    expect(lines).toContain('## Product: # Not a heading ## still not');
+    expect(lines).toContain('## Project: # Not a heading ## still not');
     expect(lines).toContain(
       '- **Outcome:** \\*\\*bold\\*\\* \\_em\\_ \\`code\\` \\[link\\](http://x) \\<script\\>alert(1)\\</script\\> \\~\\~gone\\~\\~ \\&amp; \\\\',
     );
@@ -115,8 +207,8 @@ describe('treeToMarkdown', () => {
 
   it('escapes open questions, owners and link names', () => {
     const nodes = [
-      node('product-1', null),
-      node('outcome-1', 'product-1'),
+      node('project-1', null),
+      node('outcome-1', 'project-1'),
       node('opportunity-1', 'outcome-1', {
         status: 'exploring',
         questions: [{ id: 1, text: '[x] <b>done?</b>\n- injected', done: false }],
@@ -125,16 +217,16 @@ describe('treeToMarkdown', () => {
       node('solution-1', 'opportunity-1', { status: 'candidate' }),
       node('assumption-1', 'solution-1', { status: 'testing', owner: '*me*' }),
     ];
-    const text = outline('Tree', nodes, ['product-1']);
+    const text = outline('Tree', nodes, ['project-1']);
     expect(text).toContain('      - [ ] \\[x\\] \\<b\\>done?\\</b\\> - injected\n');
     expect(text).toContain('owner: \\*me\\*');
     expect(text).toContain('- a\\](http://evil) \\[b: https://example.com/a b\n');
   });
 
   it('handles a very deep tree without overflowing the stack', () => {
-    const nodes = [node('product-1', null), node('outcome-1', 'product-1')];
+    const nodes = [node('project-1', null), node('outcome-1', 'project-1')];
     for (let i = 1; i <= 6000; i++) nodes.push(node(`opportunity-${i}`, i === 1 ? 'outcome-1' : `opportunity-${i - 1}`));
-    const text = outline('Deep', nodes, ['product-1']);
+    const text = outline('Deep', nodes, ['project-1']);
     expect(text.split('\n').filter(line => line.includes('**Opportunity:**'))).toHaveLength(6000);
   });
 });

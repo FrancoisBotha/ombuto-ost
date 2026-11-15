@@ -65,13 +65,14 @@
       </template>
     </VueFlow>
 
-    <div v-if="!tree.products.length" class="ost-canvas__empty">
+    <div v-if="!tree.projects.length" class="ost-canvas__empty">
       <div class="ost-state" data-cy="ost-canvas-empty">
-        <div class="ost-state__title">No products in this tree yet</div>
+        <div class="ost-state__title">No projects in this tree yet</div>
         <p class="ost-state__text">
-          A product is the top of a branch: it holds its own outcomes, opportunities, solutions and assumptions. Add one to start the tree.
+          A project is the top of a branch: it holds its own outcomes, opportunities, solutions and assumptions, and it can hold
+          sub-projects. Add one to start the tree.
         </p>
-        <button type="button" class="ost-btn ost-btn--primary" data-cy="ost-canvas-add-product" @click="addProduct">Add a product</button>
+        <button type="button" class="ost-btn ost-btn--primary" data-cy="ost-canvas-add-project" @click="addProject">Add a project</button>
       </div>
     </div>
 
@@ -95,11 +96,11 @@
  * Vue Flow.
  *
  * Viewport rules: custom cursor-anchored wheel zoom (Vue Flow's zoom-on-scroll off), Fit with a
- * 0.68 floor on first mount and on product switch, only-render-visible-elements, and a 180ms ease
+ * 0.68 floor on first mount and when another project is focused, only-render-visible-elements, and a 180ms ease
  * on node moves.
  *
  * Editing:
- * - drag a node onto another to re-parent: legal targets are highlighted, the one under the
+ * - drag a node onto another to re-parent (a project onto another project nests it): legal targets are highlighted, the one under the
  *   pointer is the drop target (edit-rules.ts); a drop calls tree.moveNode (append). Vue Flow keeps
  *   a dragged node where it was dropped, so after EVERY drag the positions are explicitly reset to
  *   the layout (snapToLayout) — a rejected or failed drop animates back. Escape, a window blur or
@@ -129,7 +130,7 @@ import CanvasLegend from './CanvasLegend.vue';
 import CanvasMinimap from './CanvasMinimap.vue';
 import OstEdge from './OstEdge.vue';
 import OstNode from './OstNode.vue';
-import { childCounts, isDimmed, isDraggable, laidOutNodes, matchesQuery, pinRendered, toFlowEdges, toFlowNodes } from './canvas-model';
+import { childCounts, isDimmed, laidOutNodes, matchesQuery, pinRendered, toFlowEdges, toFlowNodes } from './canvas-model';
 import { attachTargets, canAttach, clientToFlow, dropTargetAt, insideRect, legalParents } from './edit-rules';
 import { focusIsLost, restoreFocusAfterRename, typingElsewhere } from './rename-focus';
 import { ZOOM_MAX, ZOOM_MIN, type Point, useViewport, wheelZoom } from './useViewport';
@@ -160,7 +161,7 @@ const flowNodes = computed(() =>
   toFlowNodes(
     visible.value,
     tree.placed,
-    n => isDraggable(n) && ui.editingId !== n.id,
+    n => ui.editingId !== n.id,
     id => !handedOver.has(id),
   ),
 );
@@ -319,13 +320,13 @@ async function createChild(parentKey: string, type: NodeType) {
   }
 }
 
-/** Starts a new branch: a product, selected and in rename mode. */
-async function addProduct() {
+/** Starts a new branch: a top-level project, selected and in rename mode. */
+async function addProject() {
   if (creating.value) return;
   creating.value = true;
   view.userMoved();
   try {
-    const key = await tree.createProduct();
+    const key = await tree.createProject();
     if (key) await reveal(key);
   } finally {
     creating.value = false;
@@ -544,7 +545,7 @@ function onFocusIn(event: FocusEvent) {
 const ready = ref(false);
 let pendingCentre: string | null = null;
 
-/** Centre the pending node; drop it when it is not laid out (e.g. outside the product scope). */
+/** Centre the pending node; drop it when it is not laid out (e.g. outside the focused project). */
 function applyPendingCentre() {
   if (!pendingCentre || !ready.value) return;
   const p = tree.placed[pendingCentre];
@@ -552,7 +553,7 @@ function applyPendingCentre() {
   else if (view.centreOnBox(p)) pendingCentre = null;
 }
 
-/** Fit the branch in scope, then honour a pending centre request. */
+/** Fit what is in scope (every project, or the focused one), then honour a pending centre request. */
 function fit() {
   if (!ready.value) return;
   view.fit(
@@ -586,7 +587,7 @@ async function onReady() {
 }
 
 watch(
-  () => ui.productId,
+  () => ui.projectId,
   async () => {
     await nextTick();
     fit();
@@ -626,7 +627,7 @@ onUnmounted(() => {
   dragKey.value = null;
 });
 
-defineExpose({ zoomIn: view.zoomIn, zoomOut: view.zoomOut, fit, centreOn, resolveAttachTarget, createChild, addProduct, focusNode });
+defineExpose({ zoomIn: view.zoomIn, zoomOut: view.zoomOut, fit, centreOn, resolveAttachTarget, createChild, addProject, focusNode });
 </script>
 
 <style scoped>

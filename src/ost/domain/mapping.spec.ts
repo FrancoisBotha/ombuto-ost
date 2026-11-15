@@ -33,7 +33,7 @@ describe('OST mapping', () => {
 
   it('defaults null fields to empty domain values', () => {
     const mapped = fromDto(
-      dto('product-1', null, { status: null, notes: null, owner: null, links: null, questions: null, sortOrder: null }),
+      dto('project-1', null, { status: null, notes: null, owner: null, links: null, questions: null, sortOrder: null }),
     );
     expect(mapped).toMatchObject({
       parent: null,

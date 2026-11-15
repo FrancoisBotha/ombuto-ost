@@ -6,8 +6,8 @@ import { layoutTree } from '../domain/layout';
 import { pinRendered, toFlowNodes } from './canvas-model';
 
 describe('toFlowNodes (only the nodes in view are ever mounted)', () => {
-  const nodes = [node('product-1', null), node('outcome-1', 'product-1'), node('outcome-2', 'product-1')];
-  const placed = layoutTree(nodes, { roots: ['product-1'], collapsed: {} });
+  const nodes = [node('project-1', null), node('outcome-1', 'project-1'), node('outcome-2', 'project-1')];
+  const placed = layoutTree(nodes, { roots: ['project-1'], collapsed: {} });
 
   it('gives a node Vue Flow has not seen the size of its layout box, so culling can leave it unmounted', () => {
     const flow = toFlowNodes(

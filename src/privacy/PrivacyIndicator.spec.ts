@@ -103,7 +103,7 @@ describe('PrivacyIndicator', () => {
     async function failing() {
       const ctx = await indicator(exampleRecord());
       ctx.doc.setAutosaveStore(refusingAutosave());
-      await ctx.tree.patchNode('product-1', { title: 'Edited' });
+      await ctx.tree.patchNode('project-1', { title: 'Edited' });
       await ctx.doc.flushAutosave();
       await flushPromises();
       return ctx;
@@ -134,7 +134,7 @@ describe('PrivacyIndicator', () => {
     it('goes back to the usual wording once the browser stores the working copy again', async () => {
       const { button, doc, tree } = await failing();
       doc.setAutosaveStore(memoryAutosave());
-      await tree.patchNode('product-1', { title: 'Edited again' });
+      await tree.patchNode('project-1', { title: 'Edited again' });
       await doc.flushAutosave();
       await flushPromises();
       expect(button().text()).toBe('Stored on this device only');

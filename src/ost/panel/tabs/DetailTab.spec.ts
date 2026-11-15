@@ -50,7 +50,7 @@ describe('DetailTab', () => {
       ['solution-1', ['candidate', 'exploring', 'devready', 'building', 'shipped', 'dropped']],
       ['assumption-1', ['untested', 'testing', 'supported', 'refuted']],
       ['outcome-1', []],
-      ['product-1', []],
+      ['project-1', []],
       ['evidence-1', []],
     ])('%s → %j', async (key, chips) => {
       const { wrapper } = await mountTab(key);
@@ -101,7 +101,7 @@ describe('DetailTab', () => {
       expect(await present('assumption-1')).toEqual(['ost-confidence', 'ost-owner']);
       expect(await present('solution-1')).toEqual(['ost-evidence-bar']);
       expect(await present('opportunity-1')).toEqual(['ost-value-1', 'ost-priority']);
-      expect(await present('product-1')).toEqual([]);
+      expect(await present('project-1')).toEqual([]);
       expect(await present('outcome-1')).toEqual([]);
       expect(await present('evidence-1')).toEqual([]);
     });
@@ -241,8 +241,8 @@ describe('DetailTab', () => {
       // A node can arrive with no valueRating; the label must not substitute 3 and read "Solid"
       // over zero filled $ glyphs.
       const ctx = await setupStores([
-        dto('product-1', null),
-        dto('outcome-1', 'product-1'),
+        dto('project-1', null),
+        dto('outcome-1', 'project-1'),
         dto('opportunity-1', 'outcome-1', { status: 'EXPLORING', priority: 50, valueRating: null }),
       ]);
       ctx.ui.select('opportunity-1');
@@ -427,14 +427,14 @@ describe('DetailTab', () => {
 
   describe('notes', () => {
     it('shows the stored notes', async () => {
-      const ctx = await setupStores([dto('product-1', null, { notes: 'What we know so far' })]);
-      const wrapper = await mountWith(DetailTab, ctx.pinia, { nodeKey: 'product-1' });
+      const ctx = await setupStores([dto('project-1', null, { notes: 'What we know so far' })]);
+      const wrapper = await mountWith(DetailTab, ctx.pinia, { nodeKey: 'project-1' });
       expect((wrapper.get('[data-cy="ost-notes"]').element as HTMLTextAreaElement).value).toBe('What we know so far');
     });
 
     it('commits on blur only', async () => {
       const { wrapper, service } = await mountTab('outcome-1');
-      service.patchNode.resolves(dto('outcome-1', 'product-1', { notes: 'Learned a lot' }));
+      service.patchNode.resolves(dto('outcome-1', 'project-1', { notes: 'Learned a lot' }));
       const notes = wrapper.get('[data-cy="ost-notes"]');
       await notes.trigger('focus');
       await notes.setValue('Learned a lot');
@@ -454,16 +454,16 @@ describe('DetailTab', () => {
     });
 
     it('emptied notes are stored as none', async () => {
-      const ctx = await setupStores([dto('product-1', null, { notes: 'Old notes' })]);
-      ctx.service.patchNode.resolves(dto('product-1', null, { notes: null }));
-      const wrapper = await mountWith(DetailTab, ctx.pinia, { nodeKey: 'product-1' });
+      const ctx = await setupStores([dto('project-1', null, { notes: 'Old notes' })]);
+      ctx.service.patchNode.resolves(dto('project-1', null, { notes: null }));
+      const wrapper = await mountWith(DetailTab, ctx.pinia, { nodeKey: 'project-1' });
       const notes = wrapper.get('[data-cy="ost-notes"]');
       await notes.trigger('focus');
       await notes.setValue('');
       await notes.trigger('blur');
       await flushPromises();
-      expect(ctx.service.patchNode.calledOnceWithExactly('product', 1, { notes: null })).toBe(true);
-      expect(ctx.tree.byId('product-1')?.note).toBe('');
+      expect(ctx.service.patchNode.calledOnceWithExactly('project', 1, { notes: null })).toBe(true);
+      expect(ctx.tree.byId('project-1')?.note).toBe('');
     });
 
     it('a failed save keeps the typed notes in the field (rolled back in the tree only)', async () => {
@@ -530,7 +530,7 @@ describe('DetailTab', () => {
     });
 
     it.each([
-      ['product-1', ['outcome']],
+      ['project-1', ['outcome', 'project']],
       ['outcome-1', ['opportunity']],
       ['opportunity-1', ['opportunity', 'solution', 'evidence']],
       ['solution-1', ['assumption']],

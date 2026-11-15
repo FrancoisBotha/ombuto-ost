@@ -319,7 +319,7 @@ export const useDocumentStore = defineStore('document', () => {
     }
   }
 
-  // ---- actions: replace the document (New / Open file / Load example) ----------------------------
+  // ---- actions: replace the document (New / Open file / Open example) ----------------------------
   /** Starts a replace action; with unsaved changes it first waits for `resolvePending`. */
   async function request(action: ReplaceAction) {
     // Text still in a field counts: it is a change, and it must not vanish with the document.
@@ -363,11 +363,11 @@ export const useDocumentStore = defineStore('document', () => {
     }
   }
 
-  /** A new tree: one product, ready to be named. */
+  /** A new tree: one top-level project, ready to be named. */
   async function newDocument() {
     await show(emptyDocument());
-    const created = await tree.createProduct();
-    // Creating the first product is part of "New", not a change the user has to save or lose.
+    const created = await tree.createProject();
+    // Creating the first project is part of "New", not a change the user has to save or lose.
     if (created) {
       dirty.value = false;
       await writeAutosave();

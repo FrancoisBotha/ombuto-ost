@@ -140,6 +140,10 @@ onBeforeUnmount(() => {
   background: transparent;
   border: 1px solid var(--color-accent-500);
 }
+.ost-swatch--project {
+  background: var(--color-accent-900);
+  border-color: var(--color-accent-700);
+}
 .ost-swatch--outcome {
   background: var(--color-accent-900);
 }

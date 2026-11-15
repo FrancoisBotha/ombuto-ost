@@ -173,7 +173,7 @@ describe('UpdatePrompt', () => {
   it('Reload writes the pending autosave first, then switches version', async () => {
     const { find, announce, tree, doc, registration, reload } = await mounted();
     await announce();
-    await tree.patchNode('product-1', { title: 'Typed just now' });
+    await tree.patchNode('project-1', { title: 'Typed just now' });
     const flush = vi.spyOn(doc, 'flushAutosave');
     await find().get('[data-cy="ost-update-reload"]').trigger('click');
     await flushPromises();
@@ -187,7 +187,7 @@ describe('UpdatePrompt', () => {
   it('Reload with unsaved changes: once the working copy is stored, the browser is not made to ask "Leave site?"', async () => {
     const { find, announce, tree, doc } = await mounted();
     await announce();
-    await tree.patchNode('product-1', { title: 'Unsaved, but kept in the browser' });
+    await tree.patchNode('project-1', { title: 'Unsaved, but kept in the browser' });
     expect(doc.warnsBeforeLeaving()).toBe(true);
     await find().get('[data-cy="ost-update-reload"]').trigger('click');
     await flushPromises();
@@ -200,7 +200,7 @@ describe('UpdatePrompt', () => {
     expect(find().get('[data-cy="ost-update-text"]').text()).toContain('comes back after the reload');
     // Storage fails only now, at the moment of the reload.
     doc.setAutosaveStore({ load: async () => null, save: () => Promise.reject(new Error('quota')), clear: async () => undefined });
-    await tree.patchNode('product-1', { title: 'Would be lost' });
+    await tree.patchNode('project-1', { title: 'Would be lost' });
     await find().get('[data-cy="ost-update-reload"]').trigger('click');
     await flushPromises();
     expect(registration.waiting!.messages).toEqual([]);
@@ -232,7 +232,7 @@ describe('UpdatePrompt', () => {
   it('with autosave off it asks for a save to a file before the reload', async () => {
     const { find, announce, doc, tree } = await mounted();
     doc.setAutosaveStore({ load: async () => null, save: () => Promise.reject(new Error('quota')), clear: async () => undefined });
-    await tree.patchNode('product-1', { title: 'Edited' });
+    await tree.patchNode('project-1', { title: 'Edited' });
     await doc.flushAutosave();
     await announce();
     expect(find().get('[data-cy="ost-update-text"]').text()).toBe('A new version is ready. Save your tree to a file before you reload.');

@@ -66,7 +66,7 @@
     />
     <div v-else class="ost-node__title" data-cy="ost-node-title" :title="node.title" @dblclick.stop="emit('rename')">{{ node.title }}</div>
 
-    <div v-if="node.type !== 'product'" class="ost-node__meta">
+    <div v-if="node.type !== 'project'" class="ost-node__meta">
       <span v-if="node.status" class="ost-node__badge" :class="`ost-node__badge--${tone}`" :data-tone="tone" data-cy="ost-node-status">{{
         node.status
       }}</span>
@@ -260,7 +260,7 @@ const priorityDots = computed(() =>
 }
 
 /* ---- frames: type is carried by frame, never hue ------------------------------------------- */
-.ost-node--product {
+.ost-node--project {
   background: var(--color-accent-900);
   border-color: var(--color-accent-700);
   justify-content: center;
@@ -363,7 +363,7 @@ const priorityDots = computed(() =>
   -webkit-line-clamp: 3;
   line-clamp: 3;
 }
-.ost-node--product .ost-node__title,
+.ost-node--project .ost-node__title,
 .ost-node--solution .ost-node__title,
 .ost-node--assumption .ost-node__title {
   -webkit-line-clamp: 2;

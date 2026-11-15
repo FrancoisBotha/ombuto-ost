@@ -77,7 +77,7 @@ describe('the document service and the file format agree', () => {
   it.each([1, 2, 3, 4, 5, 6, 7, 8])('any sequence of service calls leaves a document that opens again (seed %i)', async seed => {
     const random = mulberry32(seed);
     const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
-    const TYPES: ApiNodeType[] = ['PRODUCT', 'OUTCOME', 'OPPORTUNITY', 'SOLUTION', 'ASSUMPTION', 'EVIDENCE'];
+    const TYPES: ApiNodeType[] = ['PROJECT', 'OUTCOME', 'OPPORTUNITY', 'SOLUTION', 'ASSUMPTION', 'EVIDENCE'];
     // Hostile on purpose: empty, too long, control characters, astral characters, lone surrogates, markup.
     const TEXTS = [
       '',
@@ -108,7 +108,7 @@ describe('the document service and the file format agree', () => {
     service.open(
       validateDocument(
         docOf(
-          node(top, 'product', null, { sortOrder: Number.MAX_VALUE }),
+          node(top, 'project', null, { sortOrder: Number.MAX_VALUE }),
           node(top - 1, 'outcome', top),
           node(top - 2, 'opportunity', top - 1, {
             links: [{ id: top, name: 'Link', url: 'https://example.com' }],
@@ -120,12 +120,12 @@ describe('the document service and the file format agree', () => {
 
     for (let step = 0; step < 400; step++) {
       const nodes = service.snapshot()!.nodes;
-      const any = () => pick(nodes.length ? nodes : [node(1, 'product', null)]);
+      const any = () => pick(nodes.length ? nodes : [node(1, 'project', null)]);
       const target = any();
       const links = nodes.flatMap(n => n.links);
       const questions = nodes.flatMap(n => n.questions);
       const attempt: Promise<unknown> = pick([
-        () => service.createNode({ type: 'PRODUCT', parentType: null, parentId: null, title: pick(TEXTS) }),
+        () => service.createNode({ type: 'PROJECT', parentType: null, parentId: null, title: pick(TEXTS) }),
         () =>
           service.createNode({
             type: pick(TYPES),
@@ -149,8 +149,8 @@ describe('the document service and the file format agree', () => {
           return service.moveNode({
             nodeType: target.type.toUpperCase() as ApiNodeType,
             nodeId: target.id,
-            parentType: target.type === 'product' ? null : (parent.type.toUpperCase() as ApiNodeType),
-            parentId: target.type === 'product' ? null : parent.id,
+            parentType: target.type === 'project' ? null : (parent.type.toUpperCase() as ApiNodeType),
+            parentId: target.type === 'project' ? null : parent.id,
             ...(random() < 0.6 ? { position: pick([0, 1, 2, 7, -1, 1.5]) } : {}),
           });
         },
@@ -176,7 +176,7 @@ describe('the document service and the file format agree', () => {
     const service = new LocalDocumentService();
     service.open(
       docOf(
-        node(top, 'product', null),
+        node(top, 'project', null),
         node(1, 'outcome', top),
         node(2, 'opportunity', 1, {
           links: [{ id: top, name: 'L', url: 'https://example.com' }],
@@ -184,8 +184,8 @@ describe('the document service and the file format agree', () => {
         }),
       ),
     );
-    const first = await service.createNode({ type: 'PRODUCT', parentType: null, parentId: null });
-    const second = await service.createNode({ type: 'PRODUCT', parentType: null, parentId: null });
+    const first = await service.createNode({ type: 'PROJECT', parentType: null, parentId: null });
+    const second = await service.createNode({ type: 'PROJECT', parentType: null, parentId: null });
     expect(new Set([first.id, second.id, top, 1, 2]).size).toBe(5);
     expect([first.id, second.id].every(Number.isSafeInteger)).toBe(true);
     const linkA = await service.addLink('opportunity', 2, { name: 'A', url: 'https://example.com/a' });
@@ -199,24 +199,24 @@ describe('the document service and the file format agree', () => {
 
   it('refuses a node beyond MAX_NODES, with a message, and the document still opens', async () => {
     const service = new LocalDocumentService();
-    const nodes = [node(1, 'product', null)];
+    const nodes = [node(1, 'project', null)];
     for (let id = 2; id <= MAX_NODES; id++) nodes.push(node(id, 'outcome', 1, { sortOrder: id }));
     service.open(docOf(...nodes));
-    const refused = service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1 });
+    const refused = service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 });
     expect(await rule(refused)).toBe('toomanynodes');
     await expect(refused).rejects.toThrow(/at most/);
-    expect(await rule(service.createNode({ type: 'PRODUCT', parentType: null, parentId: null }))).toBe('toomanynodes');
+    expect(await rule(service.createNode({ type: 'PROJECT', parentType: null, parentId: null }))).toBe('toomanynodes');
     expect(service.snapshot()!.nodes).toHaveLength(MAX_NODES);
     expectReopens(service);
     // Deleting makes room again.
     await service.deleteNode('outcome', 2);
-    expect(await rule(service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1 }))).toBe('accepted');
+    expect(await rule(service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 }))).toBe('accepted');
   });
 
   it('refuses to create or move a node deeper than MAX_DEPTH', async () => {
     const service = new LocalDocumentService();
-    // product (1) > outcome (2) > opportunities down to level MAX_DEPTH
-    const chain = [node(1, 'product', null), node(2, 'outcome', 1)];
+    // project (1) > outcome (2) > opportunities down to level MAX_DEPTH
+    const chain = [node(1, 'project', null), node(2, 'outcome', 1)];
     for (let id = 3; id <= MAX_DEPTH; id++) chain.push(node(id, 'opportunity', id - 1));
     // a second, short branch: opportunity 1001 > opportunity 1002
     chain.push(node(1001, 'opportunity', 2), node(1002, 'opportunity', 1001));
@@ -235,7 +235,7 @@ describe('the document service and the file format agree', () => {
     const service = new LocalDocumentService();
     service.open(
       docOf(
-        node(1, 'product', null),
+        node(1, 'project', null),
         node(2, 'outcome', 1),
         node(3, 'opportunity', 2, {
           links: Array.from({ length: MAX_LINKS_PER_NODE }, (_, i) => ({ id: i + 1, name: `L${i}`, url: 'https://example.com' })),
@@ -254,12 +254,12 @@ describe('the document service and the file format agree', () => {
     const heavy = '😀'.repeat(NOTES_MAX / 2);
     const full = Math.floor(MAX_NODES_WEIGHT / nodeWeight(node(2, 'outcome', 1, { notes: heavy })));
     const count = Math.min(full, MAX_NODES - 2);
-    const nodes = [node(1, 'product', null)];
+    const nodes = [node(1, 'project', null)];
     for (let id = 2; id < 2 + count; id++) nodes.push(node(id, 'outcome', 1, { notes: heavy }));
     service.open(docOf(...nodes));
     let refused = 0;
     for (let i = 0; i < 400 && !refused; i++) {
-      const outcome = await service.createNode({ type: 'OUTCOME', parentType: 'PRODUCT', parentId: 1 }).catch(() => null);
+      const outcome = await service.createNode({ type: 'OUTCOME', parentType: 'PROJECT', parentId: 1 }).catch(() => null);
       if (!outcome) break;
       if ((await rule(service.patchNode('outcome', outcome.id, { notes: heavy }))) === 'documenttoolarge') refused++;
     }
@@ -283,7 +283,7 @@ describe('the document service and the file format agree', () => {
       links: [{ id: Number.MAX_SAFE_INTEGER, name: '😀', url: 'https://example.com/\u0001' }],
       questions: [{ id: Number.MAX_SAFE_INTEGER, text: '\ud800', done: false }],
     });
-    for (const n of [extreme, node(1, 'product', null), node(2, 'assumption', 1, { owner: 'Someone' })]) {
+    for (const n of [extreme, node(1, 'project', null), node(2, 'assumption', 1, { owner: 'Someone' })]) {
       const bytes =
         new TextEncoder().encode(serializeDocument(docOf(n))).length - new TextEncoder().encode(serializeDocument(docOf())).length;
       expect(nodeWeight(n)).toBeGreaterThanOrEqual(bytes);

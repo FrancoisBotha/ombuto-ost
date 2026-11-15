@@ -5,8 +5,8 @@
  * calls them with no arguments and shows the message of a rejected promise as an error toast.
  *
  * This file is only the glue: it reads the stores, calls the pure builders (tree-svg.ts,
- * tree-markdown.ts) and hands the result to the browser. Each export covers the current product
- * view — one product or all of them — in full, whatever is collapsed or scrolled out of sight.
+ * tree-markdown.ts) and hands the result to the browser. Each export covers the current project
+ * view — one project or all of them — in full, whatever is collapsed or scrolled out of sight.
  * Nothing leaves the device: the file is built in memory and saved through a download.
  */
 import { toRaw } from 'vue';
@@ -23,7 +23,7 @@ import { EXPORT_FONT_FAMILY, type MeasureText, estimateTextWidth } from './text'
 import { treeToMarkdown } from './tree-markdown';
 import { type TreeSvg, treeToSvg } from './tree-svg';
 
-const EMPTY_TREE = 'There is nothing to export yet. Add a product to the tree first.';
+const EMPTY_TREE = 'There is nothing to export yet. Add a project to the tree first.';
 
 /** "My tree" -> "My tree.svg": the document's file name with another extension. */
 export function exportFileName(documentName: string, extension: string): string {
@@ -63,20 +63,20 @@ function currentSvg(): { source: ExportSource; image: TreeSvg } {
   return { source, image };
 }
 
-/** Saves the current product view as an SVG image. */
+/** Saves the current project view as an SVG image. */
 export async function exportSvg(): Promise<void> {
   const { source, image } = currentSvg();
   downloadFile(exportFileName(source.name, 'svg'), image.svg, 'image/svg+xml');
 }
 
-/** Saves the current product view as a PNG image (twice the canvas size, less for a very large tree). */
+/** Saves the current project view as a PNG image (twice the canvas size, less for a very large tree). */
 export async function exportPng(): Promise<void> {
   const { source, image } = currentSvg();
   const png = await svgToPng(image.svg, image.width, image.height, EXPORT_PALETTE.bg);
   downloadFile(exportFileName(source.name, 'png'), png, 'image/png');
 }
 
-/** Saves the current product view as a Markdown outline. */
+/** Saves the current project view as a Markdown outline. */
 export async function exportMarkdown(): Promise<void> {
   const source = currentTree();
   const markdown = treeToMarkdown(source.name, source.nodes, source.rootIds);

@@ -109,7 +109,7 @@ describe('TopBar', () => {
 
     it('says "Unsaved changes" after an edit, explaining where the changes are kept', async () => {
       const { w, tree } = await bar();
-      await tree.patchNode('product-1', { title: 'Edited' });
+      await tree.patchNode('project-1', { title: 'Edited' });
       await flushPromises();
       const state = w.get('[data-cy="ost-save-state"]');
       expect(state.text()).toBe('Unsaved changes');
@@ -120,7 +120,7 @@ describe('TopBar', () => {
 
     it('says "Downloaded a copy" after a save that could only download: the app cannot know it arrived', async () => {
       const { w, tree, doc } = await bar();
-      await tree.patchNode('product-1', { title: 'Edited' });
+      await tree.patchNode('project-1', { title: 'Edited' });
       await doc.save();
       await flushPromises();
       const state = w.get('[data-cy="ost-save-state"]');
@@ -134,7 +134,7 @@ describe('TopBar', () => {
       const { w, tree, doc } = await bar();
       vi.mocked(files.supportsFileHandles).mockReturnValueOnce(true);
       vi.mocked(files.pickFileToSave).mockResolvedValue({ name: 'meals.ost', kind: 'file' } as unknown as FileSystemFileHandle);
-      await tree.patchNode('product-1', { title: 'Edited' });
+      await tree.patchNode('project-1', { title: 'Edited' });
       await doc.save();
       await flushPromises();
       const state = w.get('[data-cy="ost-save-state"]');

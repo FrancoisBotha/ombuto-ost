@@ -29,7 +29,7 @@ describe('DetailPanel', () => {
 
   describe('tab set per type', () => {
     it.each([
-      ['product-1', ['detail', 'links']],
+      ['project-1', ['detail', 'links']],
       ['outcome-1', ['detail', 'links']],
       ['opportunity-1', ['detail', 'links', 'questions']],
       ['solution-1', ['detail', 'links']],
@@ -79,7 +79,7 @@ describe('DetailPanel', () => {
       await wrapper.get('[data-cy="ost-tab-questions"]').trigger('click');
       expect(ui.panelTab).toBe('questions');
       expect(wrapper.find('[data-cy="ostTab-questions"]').exists()).toBe(true);
-      ui.select('product-1');
+      ui.select('project-1');
       await flushPromises();
       expect(wrapper.get('[data-cy="ost-tab-detail"]').classes()).toContain('is-active');
       expect(wrapper.find('[data-cy="ostTab-detail"]').exists()).toBe(true);
@@ -92,7 +92,7 @@ describe('DetailPanel', () => {
     it('keeps the chosen tab from node to node', async () => {
       const { wrapper, ui } = await mountPanel('opportunity-1');
       await wrapper.get('[data-cy="ost-tab-links"]').trigger('click');
-      ui.select('product-1');
+      ui.select('project-1');
       await flushPromises();
       expect(wrapper.find('[data-cy="ostTab-links"]').exists()).toBe(true);
       expect(wrapper.find('[data-cy="ost-link-row-1"]').exists()).toBe(true);
@@ -102,7 +102,7 @@ describe('DetailPanel', () => {
 
   describe('header', () => {
     it.each([
-      ['product-1', 'Product'],
+      ['project-1', 'Project'],
       ['outcome-1', 'Outcome'],
       ['opportunity-1', 'Opportunity'],
       ['solution-1', 'Solution'],
@@ -121,7 +121,7 @@ describe('DetailPanel', () => {
       expect((wrapper.get('[data-cy="ost-panel-title"]').element as HTMLInputElement).value).toBe('Users accept');
       const crumbs = wrapper.findAll('[data-cy^="ost-breadcrumb-"]').map(c => c.attributes('data-cy'));
       expect(crumbs).toEqual([
-        'ost-breadcrumb-product-1',
+        'ost-breadcrumb-project-1',
         'ost-breadcrumb-outcome-1',
         'ost-breadcrumb-opportunity-1',
         'ost-breadcrumb-solution-1',
@@ -130,8 +130,8 @@ describe('DetailPanel', () => {
       expect(wrapper.get('[data-cy="ost-breadcrumb-solution-1"]').text()).toBe('In-app invite');
     });
 
-    it('products are the top of the tree', async () => {
-      const { wrapper } = await mountPanel('product-1');
+    it('projects are the top of the tree', async () => {
+      const { wrapper } = await mountPanel('project-1');
       expect(wrapper.get('[data-cy="ost-breadcrumb"]').text()).toBe('Top of the tree');
     });
 
@@ -141,12 +141,12 @@ describe('DetailPanel', () => {
       expect(ui.selectedId).toBe('outcome-1');
       expect(ui.centreRequest?.key).toBe('outcome-1');
       expect((wrapper.get('[data-cy="ost-panel-title"]').element as HTMLInputElement).value).toBe('Weekly interviews');
-      expect(wrapper.findAll('[data-cy^="ost-breadcrumb-"]').map(c => c.attributes('data-cy'))).toEqual(['ost-breadcrumb-product-1']);
+      expect(wrapper.findAll('[data-cy^="ost-breadcrumb-"]').map(c => c.attributes('data-cy'))).toEqual(['ost-breadcrumb-project-1']);
     });
 
     it('commits the title on Enter, which leaves the field', async () => {
       const { wrapper, service, tree } = await mountPanel('outcome-1');
-      service.patchNode.resolves(dto('outcome-1', 'product-1', { title: 'Renamed outcome' }));
+      service.patchNode.resolves(dto('outcome-1', 'project-1', { title: 'Renamed outcome' }));
       const input = wrapper.get('[data-cy="ost-panel-title"]');
       (input.element as HTMLInputElement).focus();
       await input.setValue('Renamed outcome');
@@ -160,7 +160,7 @@ describe('DetailPanel', () => {
 
     it('commits the title on blur, trimmed, and shows the stored title', async () => {
       const { wrapper, service, tree } = await mountPanel('outcome-1');
-      service.patchNode.resolves(dto('outcome-1', 'product-1', { title: 'Renamed outcome' }));
+      service.patchNode.resolves(dto('outcome-1', 'project-1', { title: 'Renamed outcome' }));
       const input = wrapper.get('[data-cy="ost-panel-title"]');
       await input.trigger('focus');
       await input.setValue('  Renamed outcome  ');
@@ -213,7 +213,7 @@ describe('DetailPanel', () => {
       await flushPromises();
       expect(field.value).toBe('Renamed on the canvas');
       // Typing from there edits the NEW title, and leaving the field saves exactly that.
-      service.patchNode.resolves(dto('outcome-1', 'product-1', { title: 'Renamed on the canvas yz' }));
+      service.patchNode.resolves(dto('outcome-1', 'project-1', { title: 'Renamed on the canvas yz' }));
       await input.setValue('Renamed on the canvas yz');
       tree.byId('outcome-1')!.title = 'Changed underneath';
       await flushPromises();
@@ -295,7 +295,7 @@ describe('DetailPanel', () => {
     });
 
     it.each([
-      ['product-1', '100'],
+      ['project-1', '100'],
       ['outcome-1', '200'],
       ['opportunity-1', '200'],
       ['solution-1', '200'],
@@ -307,13 +307,13 @@ describe('DetailPanel', () => {
     });
 
     it('explains a refused title with the rule of the node type', async () => {
-      const { wrapper, service } = await mountPanel('product-1');
+      const { wrapper, service } = await mountPanel('project-1');
       service.patchNode.rejects(new RuleError('invalidtitle'));
       const input = wrapper.get('[data-cy="ost-panel-title"]');
-      await input.setValue('Product that is fine locally');
+      await input.setValue('Project that is fine locally');
       await input.trigger('blur');
       await flushPromises();
-      expect(wrapper.get('[data-cy="ost-panel-error"]').text()).toBe('Product names need 2 to 100 characters.');
+      expect(wrapper.get('[data-cy="ost-panel-error"]').text()).toBe('Project names need 2 to 100 characters.');
     });
   });
 
@@ -336,7 +336,7 @@ describe('DetailPanel', () => {
 
     it('is cleared by the next edit that works', async () => {
       const { wrapper, service, input } = await withError();
-      service.patchNode.resolves(dto('outcome-1', 'product-1', { title: 'Renamed outcome' }));
+      service.patchNode.resolves(dto('outcome-1', 'project-1', { title: 'Renamed outcome' }));
       await input.setValue('Renamed outcome');
       await input.trigger('blur');
       await flushPromises();
@@ -496,5 +496,61 @@ describe('DetailPanel', () => {
     await flushPromises();
     expect(wrapper.find('[data-cy="ost-panel"]').exists()).toBe(false);
     expect(wrapper.find('[data-cy="ost-panel-reopen"]').exists()).toBe(false);
+  });
+  describe('a sub-project', () => {
+    async function nestedPanel(select: string) {
+      const ctx = await setupStores([
+        dto('project-1', null),
+        dto('outcome-1', 'project-1'),
+        dto('project-2', 'project-1'),
+        dto('project-3', 'project-2'),
+      ]);
+      ctx.ui.select(select);
+      const wrapper = await mountWith(DetailPanel, ctx.pinia);
+      return { ...ctx, wrapper };
+    }
+
+    it('shows the projects it sits in as its breadcrumb', async () => {
+      const { wrapper } = await nestedPanel('project-3');
+      expect(wrapper.get('[data-cy="ost-panel-kicker"]').text()).toBe('Project');
+      expect(wrapper.findAll('[data-cy^="ost-breadcrumb-"]').map(c => c.attributes('data-cy'))).toEqual([
+        'ost-breadcrumb-project-1',
+        'ost-breadcrumb-project-2',
+      ]);
+    });
+
+    it('offers "Move to top level" on a sub-project only', async () => {
+      for (const [key, offered] of [
+        ['project-1', false],
+        ['outcome-1', false],
+        ['project-2', true],
+        ['project-3', true],
+      ] as const) {
+        const { wrapper } = await nestedPanel(key);
+        expect(wrapper.find('[data-cy="ost-move-top"]').exists(), key).toBe(offered);
+        wrapper.unmount();
+      }
+    });
+
+    it('"Move to top level" moves the project out of its parent and brings it into view', async () => {
+      const { wrapper, service, tree, ui } = await nestedPanel('project-3');
+      service.moveNode.resolves({ node: dto('project-3', null, { sortOrder: 1 }), siblings: [{ key: 'project-3', sortOrder: 1 }] });
+      await wrapper.get('[data-cy="ost-move-top"]').trigger('click');
+      await flushPromises();
+      expect(service.moveNode.calledOnceWithExactly({ nodeType: 'PROJECT', nodeId: 3, parentType: null, parentId: null })).toBe(true);
+      expect(tree.byId('project-3')?.parent).toBeNull();
+      expect(ui.selectedId).toBe('project-3');
+      expect(ui.centreRequest?.key).toBe('project-3');
+      expect(wrapper.find('[data-cy="ost-move-top"]').exists()).toBe(false);
+    });
+
+    it('a refused move is reported in the panel and changes nothing', async () => {
+      const { wrapper, service, tree } = await nestedPanel('project-3');
+      service.moveNode.rejects(new RuleError('nodemissing'));
+      await wrapper.get('[data-cy="ost-move-top"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.get('[data-cy="ost-panel-error"]').text()).toContain('That node no longer exists.');
+      expect(tree.byId('project-3')?.parent).toBe('project-2');
+    });
   });
 });

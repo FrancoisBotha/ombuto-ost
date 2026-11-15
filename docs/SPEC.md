@@ -15,18 +15,29 @@ It is a port of the tree editor from the enterprise app at
   (`https://francoisbotha.github.io/ombuto-ost/`), later on a personal site. It must work from
   any sub-path: Vite `base: './'` and **hash-mode** router (or no router at all).
 - **One file = one tree.** A `.ost` file is one document holding one tree, which may contain
-  several products. No dashboard, no library of trees. New / Open / Save / Save as, plus
+  several projects, and projects inside projects. No dashboard, no library of trees. New / Open / Save / Save as, plus
   autosave of the current document in the browser so a refresh, a closed tab or a crash does not
   lose the tree (at worst the last second of typing; see "Autosave" below).
-- Kept features: the canvas (six node types: product, outcome, opportunity, solution,
+- Kept features: the canvas (six node types: project, outcome, opportunity, solution,
   assumption, evidence), palette, add child, rename, move/reorder by drag and keyboard, delete,
-  collapse/expand, search, minimap, legend, product picker, detail panel with fields and notes,
+  collapse/expand, search, minimap, legend, project picker, detail panel with fields and notes,
   **Links** tab (plain named URLs), **Open questions** tab, and **Export** to PNG, SVG and
   Markdown.
 - Removed features: teams, members, roles, sign-in, live collaboration/realtime, chat and
   comments, meeting transcripts, node history, labels/tags, the experiments page, the trees
   dashboard, the team switcher, the full-page node detail view, MCP, admin.
   - Assumption "owner" becomes a plain free-text field (there are no users).
+  - The top node type is a **project** (the enterprise app, and the first published build of
+    this one, call it a product). **Projects nest**: a project lives at the top of the tree or
+    under another project, and holds outcomes and projects, mixed. Everything else is unchanged
+    (an outcome only under a project, and so on). A project can never be moved under itself or
+    into its own subtree; nested projects count towards the 64-level and 1,000-node limits.
+    - One way to each kind: "+ Project" in the toolbar makes a top-level project; the `+` menu
+      of a project and the palette's Project card make a sub-project. Dragging a project onto
+      another nests it; "Move to top level" in the detail panel takes a sub-project back out.
+    - The project picker lists every project, indented by nesting. Choosing one focuses the
+      canvas on that project's subtree (type counts, search, collapse / expand all, minimap, fit
+      and export follow it); "All projects" shows everything.
   - Everyone can edit: there is no viewer role. Remove `canEdit` branching where it is simple to
     do so, otherwise hard-wire it to true.
 - **No vendor-specific issue-tracker or wiki wording anywhere** (code, UI copy, comments,
@@ -82,6 +93,10 @@ These are hard requirements, not nice-to-haves:
     priority, valueRating, owner, sortOrder, createdDate, lastModifiedDate, links
     `[{id,name,url}]`, questions `[{id,text,done}]`. Human-readable (pretty-printed) so the
     file is diff-able and easy for an AI agent to read.
+  - The format stays on version 1. Files and browser working copies written by the first
+    published build say `"type": "product"`: on open and on autosave restore that is read as
+    `project` (`src/doc/legacy.ts`, the one place for it), and nothing is written with the old
+    name again.
   - Strict validation on open: reject files that are not this format with a clear message, and
     never execute or render file content as HTML. Link URLs: only `http:`, `https:` and
     `mailto:` are clickable.
@@ -109,18 +124,26 @@ These are hard requirements, not nice-to-haves:
     "Saved": the app cannot see whether a download arrived.
   - Warn before closing the tab or opening/creating another document when there are changes
     not yet saved to a file.
-  - A first-run experience: an empty state with "New tree", "Open file" and "Load example"
-    (a small built-in sample tree, generic product-discovery content).
-- App shell: a slim top bar with the document name (editable), a File menu (New, Open, Save,
-  Save as, Export ▸ PNG / SVG / Markdown), the dirty/saved state, and the privacy indicator.
+  - A first-run experience: an empty state with "New tree", "Open file" and "Open example"
+    (a built-in example tree, generic product-discovery content: a project with two
+    sub-projects, every node type, several statuses, notes, links and open questions). The File
+    menu has the same "Open example", through the same replace-document flow as New and Open; the
+    example opens as an unsaved document tied to no file.
+- App shell: a slim top bar with the document name (editable), a File menu (New, Open, Open
+  example, Save, Save as, Export ▸ PNG / SVG / Markdown), the dirty/saved state, and the privacy indicator.
   Keyboard: Ctrl/Cmd+S saves, Ctrl/Cmd+O opens.
 - **Export** (`src/export/`): no new runtime dependency.
   - SVG: generated directly from the laid-out tree (`domain/layout.ts` gives positions and
     `edgePath`), with colours matching the canvas and text wrapped/truncated to fit node boxes.
-    Exports the whole tree for the current product view, ignoring collapse state and viewport.
+    Exports the whole tree for the current project view (all projects, or the focused project's
+    subtree), ignoring collapse state and viewport. Nested projects are drawn like any other
+    parent and child.
   - PNG: rasterise that SVG through an offscreen canvas at 2x.
   - Markdown: a nested outline (type, title, status and key fields, notes, links, open
-    questions) that reads well in a doc and to an AI agent.
+    questions) that reads well in a doc and to an AI agent. Every project is a heading: `##` for
+    a top-level (or the focused) project, one level deeper per level of nesting down to `######`.
+    A project inside another has a "Sub-project of: A › B" line under its heading, so the nesting
+    is unambiguous at any depth. A project's own outcomes come before its sub-projects.
 - **PWA**: `vite-plugin-pwa` (Workbox `generateSW`), precaching every built asset so the app
   runs fully offline; web manifest with name, colours and icons (SVG icon plus 192/512 PNG);
   a quiet "new version available — reload" prompt.

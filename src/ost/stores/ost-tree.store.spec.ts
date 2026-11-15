@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import sinon, { type SinonStubbedInstance } from 'sinon';
 
 import LocalDocumentService from '@/doc/local-document-service';
-import { sampleDocument } from '@/doc/sample';
+import { smallDocument } from '@/doc/small-document.test-util';
 
 import { orderTree } from '../domain/derive';
 import { bigTreeDtos, dto, sampleNodes } from '../domain/fixtures.test-util';
@@ -26,8 +26,8 @@ function deferred<T>() {
 }
 
 const TREE = [
-  dto('product-1', null, { sortOrder: 1 }),
-  dto('outcome-1', 'product-1'),
+  dto('project-1', null, { sortOrder: 1 }),
+  dto('outcome-1', 'project-1'),
   dto('opportunity-1', 'outcome-1', { status: 'EXPLORING', priority: 50, valueRating: 3 }),
   dto('opportunity-4', 'opportunity-1', { status: 'UNEXPLORED', priority: 20, valueRating: 2 }),
   dto('solution-1', 'opportunity-1', { status: 'CANDIDATE' }),
@@ -35,7 +35,7 @@ const TREE = [
   dto('evidence-1', 'assumption-1'),
   dto('opportunity-2', 'outcome-1', { status: 'UNEXPLORED', sortOrder: 1 }),
   dto('opportunity-3', 'outcome-1', { status: 'PARKED', sortOrder: 2 }),
-  dto('product-2', null, { sortOrder: 2 }),
+  dto('project-2', null, { sortOrder: 2 }),
 ];
 /** TREE is already in tree pre-order. */
 const ORDER = TREE.map(d => d.key);
@@ -103,7 +103,7 @@ describe('OST tree store', () => {
 
     it('starts from a clean view: selection, scope and an earlier error are cleared', async () => {
       ui.select('solution-1');
-      ui.setProduct('product-2');
+      ui.setProject('project-2');
       ui.startEditing('solution-1');
       service.deleteNode.rejects(new Error('boom'));
       await tree.deleteNode('solution-1');
@@ -112,7 +112,7 @@ describe('OST tree store', () => {
       expect(await tree.loadTree()).toBe(true);
       expect(ui.selectedId).toBeNull();
       expect(ui.editingId).toBeNull();
-      expect(ui.productId).toBe('all');
+      expect(ui.projectId).toBe('all');
       expect(tree.error).toBeNull();
     });
 
@@ -187,7 +187,7 @@ describe('OST tree store', () => {
     });
 
     it.each([
-      ['product-1', 'Product names need 2 to 100 characters.'],
+      ['project-1', 'Project names need 2 to 100 characters.'],
       ['opportunity-1', 'Titles need 2 to 200 characters.'],
       ['solution-1', 'Titles need 2 to 200 characters.'],
       ['assumption-1', 'Titles need 2 to 500 characters.'],
@@ -264,45 +264,45 @@ describe('OST tree store', () => {
     });
   });
 
-  describe('createProduct', () => {
-    it('appends the product, selects it and puts it in rename mode', async () => {
-      service.createNode.resolves(dto('product-9', null, { sortOrder: 3, title: 'New product' }));
-      expect(await tree.createProduct()).toBe('product-9');
-      expect(service.createNode.calledOnceWithExactly({ type: 'PRODUCT', parentType: null, parentId: null })).toBe(true);
-      expect(ids()).toEqual([...ORDER, 'product-9']);
-      expect(tree.products.map(p => p.id)).toEqual(['product-1', 'product-2', 'product-9']);
-      expect(ui.selectedId).toBe('product-9');
-      expect(ui.editingId).toBe('product-9');
-      expect(ui.productId).toBe('all');
+  describe('createProject', () => {
+    it('appends the project, selects it and puts it in rename mode', async () => {
+      service.createNode.resolves(dto('project-9', null, { sortOrder: 3, title: 'New project' }));
+      expect(await tree.createProject()).toBe('project-9');
+      expect(service.createNode.calledOnceWithExactly({ type: 'PROJECT', parentType: null, parentId: null })).toBe(true);
+      expect(ids()).toEqual([...ORDER, 'project-9']);
+      expect(tree.projects.map(p => p.id)).toEqual(['project-1', 'project-2', 'project-9']);
+      expect(ui.selectedId).toBe('project-9');
+      expect(ui.editingId).toBe('project-9');
+      expect(ui.projectId).toBe('all');
     });
 
     it('passes a title on', async () => {
-      service.createNode.resolves(dto('product-9', null, { sortOrder: 3, title: 'Checkout' }));
-      await tree.createProduct('Checkout');
-      expect(service.createNode.calledOnceWithExactly({ type: 'PRODUCT', parentType: null, parentId: null, title: 'Checkout' })).toBe(true);
+      service.createNode.resolves(dto('project-9', null, { sortOrder: 3, title: 'Checkout' }));
+      await tree.createProject('Checkout');
+      expect(service.createNode.calledOnceWithExactly({ type: 'PROJECT', parentType: null, parentId: null, title: 'Checkout' })).toBe(true);
     });
 
-    it('switches a canvas scoped to one product to the new one, so it is on screen', async () => {
-      ui.setProduct('product-1');
-      service.createNode.resolves(dto('product-9', null, { sortOrder: 3 }));
-      await tree.createProduct();
-      expect(ui.productId).toBe('product-9');
-      expect(tree.roots.map(r => r.id)).toEqual(['product-9']);
-      expect(Object.keys(tree.placed)).toEqual(['product-9']);
+    it('switches a canvas scoped to one project to the new one, so it is on screen', async () => {
+      ui.setProject('project-1');
+      service.createNode.resolves(dto('project-9', null, { sortOrder: 3 }));
+      await tree.createProject();
+      expect(ui.projectId).toBe('project-9');
+      expect(tree.roots.map(r => r.id)).toEqual(['project-9']);
+      expect(Object.keys(tree.placed)).toEqual(['project-9']);
     });
 
     it('keeps the tree and the scope when the service refuses', async () => {
-      ui.setProduct('product-1');
+      ui.setProject('project-1');
       service.createNode.rejects(new RuleError('invalidtitle'));
-      expect(await tree.createProduct('x')).toBeNull();
-      expect(tree.error).toBe('Product names need 2 to 100 characters.');
+      expect(await tree.createProject('x')).toBeNull();
+      expect(tree.error).toBe('Project names need 2 to 100 characters.');
       expect(ids()).toEqual(ORDER);
-      expect(ui.productId).toBe('product-1');
+      expect(ui.projectId).toBe('project-1');
       expect(ui.selectedId).toBeNull();
 
       service.createNode.rejects(new Error('boom'));
-      expect(await tree.createProduct()).toBeNull();
-      expect(tree.error).toBe('The product could not be created.');
+      expect(await tree.createProject()).toBeNull();
+      expect(tree.error).toBe('The project could not be created.');
     });
   });
 
@@ -384,19 +384,19 @@ describe('OST tree store', () => {
       expect(childIds('outcome-1')).toEqual(['opportunity-1', 'opportunity-3', 'opportunity-2']);
     });
 
-    it('reorders products with a null target', async () => {
+    it('reorders projects with a null target', async () => {
       service.moveNode.resolves(
-        moved(dto('product-2', null, { sortOrder: 0 }), [
-          { key: 'product-2', sortOrder: 0 },
-          { key: 'product-1', sortOrder: 1 },
+        moved(dto('project-2', null, { sortOrder: 0 }), [
+          { key: 'project-2', sortOrder: 0 },
+          { key: 'project-1', sortOrder: 1 },
         ]),
       );
-      expect(await tree.moveNode('product-2', null, 0)).toBe(true);
+      expect(await tree.moveNode('project-2', null, 0)).toBe(true);
       expect(
-        service.moveNode.calledOnceWithExactly({ nodeType: 'PRODUCT', nodeId: 2, parentType: null, parentId: null, position: 0 }),
+        service.moveNode.calledOnceWithExactly({ nodeType: 'PROJECT', nodeId: 2, parentType: null, parentId: null, position: 0 }),
       ).toBe(true);
-      expect(tree.products.map(p => p.id)).toEqual(['product-2', 'product-1']);
-      expect(ids()).toEqual(['product-2', ...ORDER.filter(k => k !== 'product-2')]);
+      expect(tree.projects.map(p => p.id)).toEqual(['project-2', 'project-1']);
+      expect(ids()).toEqual(['project-2', ...ORDER.filter(k => k !== 'project-2')]);
     });
 
     it('refuses illegal targets locally', async () => {
@@ -414,7 +414,7 @@ describe('OST tree store', () => {
       expect(ids()).toEqual(ORDER);
     });
 
-    it('ignores unknown nodes and a null target for anything but a product', async () => {
+    it('ignores unknown nodes and a null target for anything but a project', async () => {
       expect(await tree.moveNode('solution-99', 'opportunity-2')).toBe(false);
       expect(await tree.moveNode('solution-1', 'opportunity-99')).toBe(false);
       expect(await tree.moveNode('solution-1', null)).toBe(false);
@@ -465,8 +465,8 @@ describe('OST tree store', () => {
     it('returns false for the first node moving earlier and the last moving later', async () => {
       expect(await tree.reorderNode('opportunity-1', -1)).toBe(false);
       expect(await tree.reorderNode('opportunity-3', 1)).toBe(false);
-      expect(await tree.reorderNode('product-1', -1)).toBe(false);
-      expect(await tree.reorderNode('product-2', 1)).toBe(false);
+      expect(await tree.reorderNode('project-1', -1)).toBe(false);
+      expect(await tree.reorderNode('project-2', 1)).toBe(false);
       expect(await tree.reorderNode('opportunity-99', 1)).toBe(false);
       expect(service.moveNode.called).toBe(false);
       expect(tree.error).toBeNull();
@@ -503,10 +503,10 @@ describe('OST tree store', () => {
       expect(service.moveNode.lastCall.args[0]).toMatchObject({ nodeId: 3, position: 1 });
     });
 
-    it('reorders products among themselves', async () => {
+    it('reorders projects among themselves', async () => {
       accept();
-      expect(await tree.reorderNode('product-2', -1)).toBe(true);
-      expect(service.moveNode.lastCall.args[0]).toEqual({ nodeType: 'PRODUCT', nodeId: 2, parentType: null, parentId: null, position: 0 });
+      expect(await tree.reorderNode('project-2', -1)).toBe(true);
+      expect(service.moveNode.lastCall.args[0]).toEqual({ nodeType: 'PROJECT', nodeId: 2, parentType: null, parentId: null, position: 0 });
     });
   });
 
@@ -533,15 +533,15 @@ describe('OST tree store', () => {
       expect(JSON.parse(localStorage.getItem(COLLAPSED_STORAGE_KEY)!)).toEqual({ 'outcome-1': true });
     });
 
-    it('deleting the product in scope widens the scope to every product', async () => {
-      ui.setProduct('product-1');
-      ui.select('product-2');
+    it('deleting the project in scope widens the scope to every project', async () => {
+      ui.setProject('project-1');
+      ui.select('project-2');
       service.deleteNode.resolves();
-      expect(await tree.deleteNode('product-1')).toBe(true);
-      expect(ids()).toEqual(['product-2']);
-      expect(ui.productId).toBe('all');
-      expect(ui.selectedId).toBe('product-2');
-      expect(Object.keys(tree.placed)).toEqual(['product-2']);
+      expect(await tree.deleteNode('project-1')).toBe(true);
+      expect(ids()).toEqual(['project-2']);
+      expect(ui.projectId).toBe('all');
+      expect(ui.selectedId).toBe('project-2');
+      expect(Object.keys(tree.placed)).toEqual(['project-2']);
     });
 
     it('keeps everything when the service refuses', async () => {
@@ -736,17 +736,17 @@ describe('OST tree store', () => {
       expect(tree.byId(undefined)).toBeUndefined();
     });
 
-    it('products lists every product in order', () => {
-      expect(tree.products.map(p => p.id)).toEqual(['product-1', 'product-2']);
+    it('projects lists every project in order', () => {
+      expect(tree.projects.map(p => p.id)).toEqual(['project-1', 'project-2']);
     });
 
-    it('roots follows the product chosen in the view', () => {
-      expect(tree.roots.map(r => r.id)).toEqual(['product-1', 'product-2']);
-      ui.setProduct('product-2');
-      expect(tree.roots.map(r => r.id)).toEqual(['product-2']);
-      ui.setProduct('product-99');
+    it('roots follows the project chosen in the view', () => {
+      expect(tree.roots.map(r => r.id)).toEqual(['project-1', 'project-2']);
+      ui.setProject('project-2');
+      expect(tree.roots.map(r => r.id)).toEqual(['project-2']);
+      ui.setProject('project-99');
       expect(tree.roots).toEqual([]);
-      ui.setProduct('all');
+      ui.setProject('all');
       expect(tree.roots).toHaveLength(2);
     });
 
@@ -759,28 +759,28 @@ describe('OST tree store', () => {
 
       ui.setCollapsed('opportunity-1', true);
       expect(Object.keys(tree.placed).sort()).toEqual(
-        ['product-1', 'outcome-1', 'opportunity-1', 'opportunity-2', 'opportunity-3', 'product-2'].sort(),
+        ['project-1', 'outcome-1', 'opportunity-1', 'opportunity-2', 'opportunity-3', 'project-2'].sort(),
       );
       ui.setCollapsed('opportunity-1', false);
       expect(Object.keys(tree.placed)).toHaveLength(TREE.length);
 
-      ui.setProduct('product-2');
-      expect(Object.keys(tree.placed)).toEqual(['product-2']);
-      ui.setProduct('product-1');
-      expect(Object.keys(tree.placed).sort()).toEqual(ORDER.filter(k => k !== 'product-2').sort());
+      ui.setProject('project-2');
+      expect(Object.keys(tree.placed)).toEqual(['project-2']);
+      ui.setProject('project-1');
+      expect(Object.keys(tree.placed).sort()).toEqual(ORDER.filter(k => k !== 'project-2').sort());
     });
 
     it('descendantCount counts the whole subtree and follows structural changes', async () => {
-      expect(tree.descendantCount('product-1')).toBe(8);
+      expect(tree.descendantCount('project-1')).toBe(8);
       expect(tree.descendantCount('opportunity-1')).toBe(4);
       expect(tree.descendantCount('solution-1')).toBe(2);
       expect(tree.descendantCount('evidence-1')).toBe(0);
-      expect(tree.descendantCount('product-2')).toBe(0);
+      expect(tree.descendantCount('project-2')).toBe(0);
       expect(tree.descendantCount('solution-99')).toBe(0);
 
       service.deleteNode.resolves();
       await tree.deleteNode('assumption-1');
-      expect(tree.descendantCount('product-1')).toBe(6);
+      expect(tree.descendantCount('project-1')).toBe(6);
       expect(tree.descendantCount('solution-1')).toBe(0);
     });
 
@@ -789,18 +789,18 @@ describe('OST tree store', () => {
       nodes.find(n => n.id === 'opportunity-1')!.parent = 'opportunity-2';
       tree.nodes = nodes;
       expect(tree.descendantCount('opportunity-1')).toBeGreaterThanOrEqual(0);
-      expect(tree.descendantCount('product-1')).toBe(1);
+      expect(tree.descendantCount('project-1')).toBe(1);
     });
 
-    it('ancestors runs from the product down to the direct parent', () => {
+    it('ancestors runs from the project down to the direct parent', () => {
       expect(tree.ancestors('evidence-1').map(n => n.id)).toEqual([
-        'product-1',
+        'project-1',
         'outcome-1',
         'opportunity-1',
         'solution-1',
         'assumption-1',
       ]);
-      expect(tree.ancestors('product-1')).toEqual([]);
+      expect(tree.ancestors('project-1')).toEqual([]);
       expect(tree.ancestors('solution-99')).toEqual([]);
     });
 
@@ -821,8 +821,8 @@ describe('OST tree store', () => {
       service.getTree.resolves(big);
       await tree.loadTree();
       expect(Object.keys(tree.placed)).toHaveLength(big.length);
-      const product = big[0].key;
-      expect(tree.descendantCount(product)).toBe(big.filter((_, i) => i > 0 && i < big.length / 3).length);
+      const project = big[0].key;
+      expect(tree.descendantCount(project)).toBe(big.filter((_, i) => i > 0 && i < big.length / 3).length);
 
       const opportunity = big.find(d => d.type === 'OPPORTUNITY')!;
       service.patchNode.callsFake(async (_type, _id, body) =>
@@ -869,7 +869,7 @@ describe('OST tree store without a document service', () => {
     const attempts: [string, () => Promise<unknown>, unknown][] = [
       ['patchNode', () => tree.patchNode('opportunity-1', { title: 'Renamed' }), false],
       ['createNode', () => tree.createNode('solution-1'), null],
-      ['createProduct', () => tree.createProduct(), null],
+      ['createProject', () => tree.createProject(), null],
       ['moveNode', () => tree.moveNode('solution-1', 'opportunity-2'), false],
       ['reorderNode', () => tree.reorderNode('assumption-2', 1), false],
       ['deleteNode', () => tree.deleteNode('solution-1'), false],
@@ -891,12 +891,12 @@ describe('OST tree store without a document service', () => {
 
 /**
  * The store as the app runs it: against the real document service and an in-memory document
- * (ids in the example tree: product 1, outcome 2, opportunities 3 / 5 / 11 / 14, solutions 6 / 10 /
+ * (ids in the small test document: project 1, outcome 2, opportunities 3 / 5 / 11 / 14, solutions 6 / 10 /
  * 12, assumptions 7 / 9 / 13, evidence 4 / 8).
  */
 describe('OST tree store on a real document', () => {
   const SAMPLE_ORDER = [
-    'product-1',
+    'project-1',
     'outcome-2',
     'opportunity-3',
     'opportunity-5',
@@ -941,7 +941,7 @@ describe('OST tree store on a real document', () => {
     localStorage.clear();
     setActivePinia(createPinia());
     service = new LocalDocumentService();
-    service.open(sampleDocument(new Date('2026-09-01T10:00:00Z')));
+    service.open(smallDocument(new Date('2026-09-01T10:00:00Z')));
     changed = vi.fn<() => void>();
     service.onChange(changed);
     tree = useOstTreeStore();
@@ -991,8 +991,8 @@ describe('OST tree store on a real document', () => {
       expect(tree.error).toBe(message);
       expect({ ...tree.byId(key)! }).toEqual(shown);
     };
-    await refused('product-1', { title: 'x' }, 'Product names need 2 to 100 characters.');
-    await refused('product-1', { title: 'x'.repeat(101) }, 'Product names need 2 to 100 characters.');
+    await refused('project-1', { title: 'x' }, 'Project names need 2 to 100 characters.');
+    await refused('project-1', { title: 'x'.repeat(101) }, 'Project names need 2 to 100 characters.');
     await refused('opportunity-3', { title: 'x'.repeat(201) }, 'Titles need 2 to 200 characters.');
     await refused('assumption-7', { title: ' ' }, 'Titles need 2 to 500 characters.');
     await refused('opportunity-3', { status: 'shipped' }, 'That status is not valid for this node.');
@@ -1034,27 +1034,27 @@ describe('OST tree store on a real document', () => {
 
   it('refuses a child title that is too long, creating nothing', async () => {
     expect(await tree.createNode('outcome-2', 'opportunity', 'x'.repeat(201))).toBeNull();
-    expect(tree.error).toBe('Titles need 2 to 200 characters (100 for products, 500 for assumptions and evidence).');
+    expect(tree.error).toBe('Titles need 2 to 200 characters (100 for projects, 500 for assumptions and evidence).');
     expect(ids()).toEqual(SAMPLE_ORDER);
     expect(service.snapshot()!.nodes).toHaveLength(SAMPLE_ORDER.length);
     expect(changed).not.toHaveBeenCalled();
   });
 
-  it('creates a product as a new branch, placed last', async () => {
-    ui.setProduct('product-1');
-    expect(await tree.createProduct()).toBe('product-15');
-    expect(ids()).toEqual([...SAMPLE_ORDER, 'product-15']);
-    expect(tree.byId('product-15')).toMatchObject({ parent: null, title: 'New product', sortOrder: 1 });
-    expect(stored(15)).toMatchObject({ type: 'product', parentId: null, sortOrder: 1 });
-    expect(ui.productId).toBe('product-15');
-    expect(Object.keys(tree.placed)).toEqual(['product-15']);
+  it('creates a project as a new branch, placed last', async () => {
+    ui.setProject('project-1');
+    expect(await tree.createProject()).toBe('project-15');
+    expect(ids()).toEqual([...SAMPLE_ORDER, 'project-15']);
+    expect(tree.byId('project-15')).toMatchObject({ parent: null, title: 'New project', sortOrder: 1 });
+    expect(stored(15)).toMatchObject({ type: 'project', parentId: null, sortOrder: 1 });
+    expect(ui.projectId).toBe('project-15');
+    expect(Object.keys(tree.placed)).toEqual(['project-15']);
 
-    expect(await tree.createNode('product-15', undefined, 'Fewer abandoned plans')).toBe('outcome-16');
-    expect(Object.keys(tree.placed).sort()).toEqual(['outcome-16', 'product-15']);
+    expect(await tree.createNode('project-15', undefined, 'Fewer abandoned plans')).toBe('outcome-16');
+    expect(Object.keys(tree.placed).sort()).toEqual(['outcome-16', 'project-15']);
 
-    expect(await tree.createProduct('x'.repeat(101))).toBeNull();
-    expect(tree.error).toBe('Product names need 2 to 100 characters.');
-    expect(ui.productId).toBe('product-15');
+    expect(await tree.createProject('x'.repeat(101))).toBeNull();
+    expect(tree.error).toBe('Project names need 2 to 100 characters.');
+    expect(ui.projectId).toBe('project-15');
     expect(service.snapshot()!.nodes).toHaveLength(SAMPLE_ORDER.length + 2);
   });
 
@@ -1069,7 +1069,7 @@ describe('OST tree store on a real document', () => {
     expect(tree.byId('solution-10')?.sortOrder).toBe(0);
     expect(ui.collapsed['opportunity-11']).toBe(false);
     expect(ids()).toEqual([
-      'product-1',
+      'project-1',
       'outcome-2',
       'opportunity-3',
       'opportunity-5',
@@ -1121,7 +1121,7 @@ describe('OST tree store on a real document', () => {
 
     expect(await tree.reorderNode('opportunity-11', -1)).toBe(true);
     expect(storedOrder('opportunity', 2)).toEqual([11, 3, 14]);
-    expect(ids().slice(0, 6)).toEqual(['product-1', 'outcome-2', 'opportunity-11', 'solution-12', 'assumption-13', 'opportunity-3']);
+    expect(ids().slice(0, 6)).toEqual(['project-1', 'outcome-2', 'opportunity-11', 'solution-12', 'assumption-13', 'opportunity-3']);
 
     expect(await tree.reorderNode('opportunity-11', 1)).toBe(true);
     expect(storedOrder('opportunity', 2)).toEqual([3, 11, 14]);
@@ -1139,19 +1139,19 @@ describe('OST tree store on a real document', () => {
     await expectInStep();
   });
 
-  it('reorders products', async () => {
-    expect(await tree.reorderNode('product-1', 1)).toBe(false);
-    await tree.createProduct('Second product');
-    await tree.createProduct('Third product');
-    expect(tree.products.map(p => p.id)).toEqual(['product-1', 'product-15', 'product-16']);
+  it('reorders projects', async () => {
+    expect(await tree.reorderNode('project-1', 1)).toBe(false);
+    await tree.createProject('Second project');
+    await tree.createProject('Third project');
+    expect(tree.projects.map(p => p.id)).toEqual(['project-1', 'project-15', 'project-16']);
 
-    expect(await tree.reorderNode('product-16', -1)).toBe(true);
-    expect(storedOrder('product', null)).toEqual([1, 16, 15]);
-    expect(await tree.moveNode('product-15', null, 0)).toBe(true);
-    expect(storedOrder('product', null)).toEqual([15, 1, 16]);
-    expect(tree.products.map(p => p.id)).toEqual(['product-15', 'product-1', 'product-16']);
-    expect(ids()[0]).toBe('product-15');
-    expect(ids().at(-1)).toBe('product-16');
+    expect(await tree.reorderNode('project-16', -1)).toBe(true);
+    expect(storedOrder('project', null)).toEqual([1, 16, 15]);
+    expect(await tree.moveNode('project-15', null, 0)).toBe(true);
+    expect(storedOrder('project', null)).toEqual([15, 1, 16]);
+    expect(tree.projects.map(p => p.id)).toEqual(['project-15', 'project-1', 'project-16']);
+    expect(ids()[0]).toBe('project-15');
+    expect(ids().at(-1)).toBe('project-16');
     await expectInStep();
   });
 
@@ -1159,7 +1159,7 @@ describe('OST tree store on a real document', () => {
     ui.select('assumption-7');
     ui.setCollapsed('solution-6', true);
     expect(await tree.deleteNode('opportunity-3')).toBe(true);
-    expect(ids()).toEqual(['product-1', 'outcome-2', 'opportunity-11', 'solution-12', 'assumption-13', 'opportunity-14']);
+    expect(ids()).toEqual(['project-1', 'outcome-2', 'opportunity-11', 'solution-12', 'assumption-13', 'opportunity-14']);
     expect(
       service
         .snapshot()!
@@ -1168,7 +1168,7 @@ describe('OST tree store on a real document', () => {
     ).toEqual([1, 2, 11, 12, 13, 14]);
     expect(ui.selectedId).toBeNull();
     expect(ui.collapsed).toEqual({});
-    expect(tree.descendantCount('product-1')).toBe(5);
+    expect(tree.descendantCount('project-1')).toBe(5);
     expect(changed).toHaveBeenCalledTimes(1);
 
     // Ids are never reused.
@@ -1176,13 +1176,13 @@ describe('OST tree store on a real document', () => {
     await expectInStep();
   });
 
-  it('deletes the last product, leaving an empty tree', async () => {
-    expect(await tree.deleteNode('product-1')).toBe(true);
+  it('deletes the last project, leaving an empty tree', async () => {
+    expect(await tree.deleteNode('project-1')).toBe(true);
     expect(tree.nodes).toEqual([]);
     expect(service.snapshot()!.nodes).toEqual([]);
     expect(tree.placed).toEqual({});
-    expect(await tree.createProduct('Start again')).toBe('product-15');
-    expect(tree.byId('product-15')?.sortOrder).toBe(0);
+    expect(await tree.createProject('Start again')).toBe('project-15');
+    expect(tree.byId('project-15')?.sortOrder).toBe(0);
   });
 
   it('adds, edits and removes links', async () => {
@@ -1254,10 +1254,171 @@ describe('OST tree store on a real document', () => {
     expect(ui.collapsed).toEqual({ 'opportunity-3': true });
     expect(tree.placed['solution-6']).toBeUndefined();
 
-    service.open(sampleDocument());
+    service.open(smallDocument());
     expect(await tree.loadTree()).toBe(true);
     expect(ui.collapsed).toEqual({});
     expect(tree.placed['solution-6']).toBeDefined();
     expect(JSON.parse(localStorage.getItem(COLLAPSED_STORAGE_KEY)!)).toEqual({});
+  });
+  describe('projects inside projects', () => {
+    // Added to the small document:
+    //   project-1 > (outcome-2 > …, project-15 "Planner" > project-16 "Favourites" > outcome-17), project-18 "Other" at the top
+    beforeEach(async () => {
+      expect(await tree.createNode('project-1', 'project', 'Planner')).toBe('project-15');
+      expect(await tree.createNode('project-15', 'project', 'Favourites')).toBe('project-16');
+      expect(await tree.createNode('project-16', 'outcome', 'Remembered meals')).toBe('outcome-17');
+      expect(await tree.createProject('Other')).toBe('project-18');
+      changed.mockClear();
+    });
+
+    it("a sub-project is an ordinary child of its project, listed after the project's own outcomes", async () => {
+      expect(ids()).toEqual([...SAMPLE_ORDER, 'project-15', 'project-16', 'outcome-17', 'project-18']);
+      expect(stored(15)).toMatchObject({ type: 'project', parentId: 1, sortOrder: 0 });
+      expect(stored(16)).toMatchObject({ type: 'project', parentId: 15, sortOrder: 0 });
+      expect(tree.projects.map(p => p.id)).toEqual(['project-1', 'project-15', 'project-16', 'project-18']);
+      expect(tree.ancestors('outcome-17').map(n => n.id)).toEqual(['project-1', 'project-15', 'project-16']);
+      expect(tree.descendantCount('project-15')).toBe(2);
+      // Only a project takes a project.
+      expect(await tree.createNode('outcome-2', 'project')).toBeNull();
+      expect(tree.error).toBe('That node cannot go there.');
+      expect(changed).not.toHaveBeenCalled();
+      await expectInStep();
+    });
+
+    it('with all projects shown, only the top-level projects are the tops of the canvas', () => {
+      expect(ui.projectId).toBe('all');
+      expect(tree.roots.map(p => p.id)).toEqual(['project-1', 'project-18']);
+      expect(Object.keys(tree.placed)).toHaveLength(SAMPLE_ORDER.length + 4);
+      expect(tree.placed['project-1'].depth).toBe(0);
+      expect(tree.placed['project-15'].depth).toBe(1);
+      expect(tree.placed['project-16'].depth).toBe(2);
+      expect(tree.placed['outcome-17'].depth).toBe(3);
+      expect(tree.placed['project-18'].depth).toBe(0);
+      expect(tree.inScope('outcome-17')).toBe(true);
+    });
+
+    it('focusing a project, top-level or nested, shows exactly its subtree', () => {
+      ui.setProject('project-15');
+      expect(tree.roots.map(p => p.id)).toEqual(['project-15']);
+      expect(Object.keys(tree.placed).sort()).toEqual(['outcome-17', 'project-15', 'project-16']);
+      expect(tree.placed['project-15']).toMatchObject({ depth: 0, y: 0 });
+      expect(['project-15', 'project-16', 'outcome-17'].every(tree.inScope)).toBe(true);
+      expect(['project-1', 'outcome-2', 'opportunity-3', 'project-18', 'gone-1'].some(tree.inScope)).toBe(false);
+
+      ui.setProject('project-16');
+      expect(Object.keys(tree.placed).sort()).toEqual(['outcome-17', 'project-16']);
+      expect(tree.inScope('project-15')).toBe(false);
+
+      ui.setProject('project-1');
+      expect(Object.keys(tree.placed)).toHaveLength(SAMPLE_ORDER.length + 3);
+      expect(tree.inScope('project-18')).toBe(false);
+
+      ui.setProject('all');
+      expect(Object.keys(tree.placed)).toHaveLength(SAMPLE_ORDER.length + 4);
+    });
+
+    it('a node created inside the focused project stays on the canvas', async () => {
+      ui.setProject('project-16');
+      expect(await tree.createNode('project-16', 'project', 'Deeper')).toBe('project-19');
+      expect(ui.projectId).toBe('project-16');
+      expect(tree.placed['project-19']).toMatchObject({ depth: 1 });
+      // "+ Project" in the toolbar makes a top-level project: the canvas follows it there.
+      expect(await tree.createProject('Brand new')).toBe('project-20');
+      expect(tree.byId('project-20')?.parent).toBeNull();
+      expect(ui.projectId).toBe('project-20');
+    });
+
+    it('re-parents a project under another project, with everything inside it', async () => {
+      ui.setCollapsed('project-18', true);
+      expect(await tree.moveNode('project-15', 'project-18')).toBe(true);
+      expect(tree.byId('project-15')).toMatchObject({ parent: 'project-18', sortOrder: 0 });
+      expect(stored(15)).toMatchObject({ parentId: 18, sortOrder: 0 });
+      expect(stored(16)?.parentId).toBe(15);
+      expect(ui.collapsed['project-18']).toBe(false);
+      expect(tree.ancestors('outcome-17').map(n => n.id)).toEqual(['project-18', 'project-15', 'project-16']);
+      expect(ids().slice(-4)).toEqual(['project-18', 'project-15', 'project-16', 'outcome-17']);
+      // A top-level project nests the same way, and the top level closes the gap.
+      expect(await tree.moveNode('project-18', 'project-1')).toBe(true);
+      expect(tree.roots.map(p => p.id)).toEqual(['project-1']);
+      expect(storedOrder('project', null)).toEqual([1]);
+      expect(storedOrder('project', 1)).toEqual([18]);
+      await expectInStep();
+    });
+
+    it('refuses to move a project under itself or into its own subtree, before and inside the document', async () => {
+      const before = service.snapshot();
+      for (const [key, target] of [
+        ['project-1', 'project-1'],
+        ['project-1', 'project-15'],
+        ['project-1', 'project-16'],
+        ['project-15', 'project-16'],
+        ['project-18', 'outcome-17'],
+        ['project-16', 'project-15'], // already there
+      ]) {
+        tree.clearError();
+        expect(await tree.moveNode(key, target), `${key} under ${target}`).toBe(false);
+        expect(tree.error, `${key} under ${target}`).toBe('That node cannot go there.');
+      }
+      expect(service.snapshot()).toEqual(before);
+      expect(changed).not.toHaveBeenCalled();
+      // The document service refuses the same move by itself, with the reason.
+      await expect(service.moveNode({ nodeType: 'PROJECT', nodeId: 1, parentType: 'PROJECT', parentId: 16 })).rejects.toThrow(
+        'A node cannot move under its own descendant.',
+      );
+      expect(service.snapshot()).toEqual(before);
+    });
+
+    it('reorders sub-projects among themselves with the keyboard step, apart from the outcomes beside them', async () => {
+      expect(await tree.createNode('project-1', 'project', 'Shopping')).toBe('project-19');
+      expect(storedOrder('project', 1)).toEqual([15, 19]);
+      expect(await tree.reorderNode('project-19', -1)).toBe(true);
+      expect(storedOrder('project', 1)).toEqual([19, 15]);
+      expect(storedOrder('outcome', 1)).toEqual([2]);
+      expect(tree.projects.map(p => p.id)).toEqual(['project-1', 'project-19', 'project-15', 'project-16', 'project-18']);
+      expect(await tree.reorderNode('project-19', -1)).toBe(false);
+      expect(await tree.reorderNode('project-19', 1)).toBe(true);
+      expect(storedOrder('project', 1)).toEqual([15, 19]);
+      // Top-level projects still reorder among the top-level projects only.
+      expect(await tree.reorderNode('project-18', -1)).toBe(true);
+      expect(storedOrder('project', null)).toEqual([18, 1]);
+      await expectInStep();
+    });
+
+    it('moves a sub-project out to the top level; one that leaves the focused project brings every project back', async () => {
+      ui.setProject('project-15');
+      expect(await tree.moveNode('project-16', null)).toBe(true);
+      expect(tree.byId('project-16')).toMatchObject({ parent: null, sortOrder: 2 });
+      expect(stored(16)).toMatchObject({ parentId: null, sortOrder: 2 });
+      expect(storedOrder('project', null)).toEqual([1, 18, 16]);
+      expect(stored(17)?.parentId).toBe(16);
+      expect(ui.projectId).toBe('all');
+      expect(tree.roots.map(p => p.id)).toEqual(['project-1', 'project-18', 'project-16']);
+      // Only a project may be at the top.
+      expect(await tree.moveNode('outcome-17', null)).toBe(false);
+      expect(stored(17)?.parentId).toBe(16);
+      await expectInStep();
+    });
+
+    it('a move inside the focused project keeps the focus', async () => {
+      ui.setProject('project-1');
+      expect(await tree.moveNode('project-16', 'project-1')).toBe(true);
+      expect(ui.projectId).toBe('project-1');
+      expect(tree.placed['outcome-17']).toBeDefined();
+    });
+
+    it('deleting the focused sub-project deletes what is inside it and shows every project again', async () => {
+      ui.setProject('project-15');
+      ui.setCollapsed('project-16', true);
+      expect(await tree.deleteNode('project-15')).toBe(true);
+      expect(ui.projectId).toBe('all');
+      expect(ui.collapsed).toEqual({});
+      expect(ids()).toEqual([...SAMPLE_ORDER, 'project-18']);
+      expect(
+        service
+          .snapshot()!
+          .nodes.map(n => n.id)
+          .filter(id => id >= 15),
+      ).toEqual([18]);
+    });
   });
 });

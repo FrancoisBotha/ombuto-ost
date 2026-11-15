@@ -77,12 +77,12 @@ describe('OST UI store', () => {
   });
 
   describe('scope and filters', () => {
-    it('scopes to one product, falling back to all of them', () => {
-      expect(ui.productId).toBe('all');
-      ui.setProduct('product-2');
-      expect(ui.productId).toBe('product-2');
-      ui.setProduct('');
-      expect(ui.productId).toBe('all');
+    it('focuses one project, falling back to all of them', () => {
+      expect(ui.projectId).toBe('all');
+      ui.setProject('project-2');
+      expect(ui.projectId).toBe('project-2');
+      ui.setProject('');
+      expect(ui.projectId).toBe('all');
     });
 
     it('hides and shows node types and keeps the search text', () => {
@@ -126,6 +126,14 @@ describe('OST UI store', () => {
       expect(ui.collapsed).toEqual({});
       ui.restoreCollapsed();
       expect(ui.collapsed).toEqual({ 'outcome-1': true });
+    });
+
+    it('reads the keys the first published build remembered: "product-<id>" is that project', () => {
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify({ 'product-1': true, 'outcome-2': true, 'product-9': false }));
+      ui.restoreCollapsed();
+      expect(ui.collapsed).toEqual({ 'project-1': true, 'outcome-2': true, 'project-9': false });
+      ui.pruneCollapsed(new Set(['project-1', 'outcome-2']));
+      expect(persisted()).toEqual({ 'project-1': true, 'outcome-2': true });
     });
 
     it('restores an empty map when nothing was persisted', () => {
@@ -228,16 +236,16 @@ describe('OST UI store', () => {
       ui.openAddMenu('solution-1');
       ui.askDelete('solution-1');
       ui.setDropTarget('assumption-1');
-      ui.setProduct('product-1');
+      ui.setProject('project-1');
 
-      ui.forgetNodes(new Set(['solution-1', 'assumption-1', 'product-1']));
+      ui.forgetNodes(new Set(['solution-1', 'assumption-1', 'project-1']));
 
       expect(ui.selectedId).toBeNull();
       expect(ui.editingId).toBeNull();
       expect(ui.addMenuId).toBeNull();
       expect(ui.confirmId).toBeNull();
       expect(ui.dropTargetId).toBeNull();
-      expect(ui.productId).toBe('all');
+      expect(ui.projectId).toBe('all');
       expect(ui.collapsed).toEqual({ 'outcome-1': true });
       expect(persisted()).toEqual({ 'outcome-1': true });
     });
@@ -245,13 +253,13 @@ describe('OST UI store', () => {
     it('leaves unrelated state alone', () => {
       ui.select('outcome-1');
       ui.startEditing('outcome-1');
-      ui.setProduct('product-2');
+      ui.setProject('project-2');
       ui.setCollapsed('outcome-1', true);
       const { setItem } = stubStorage();
       ui.forgetNodes(new Set(['solution-9']));
       expect(ui.selectedId).toBe('outcome-1');
       expect(ui.editingId).toBe('outcome-1');
-      expect(ui.productId).toBe('product-2');
+      expect(ui.projectId).toBe('project-2');
       expect(ui.collapsed).toEqual({ 'outcome-1': true });
       expect(setItem).not.toHaveBeenCalled();
     });
@@ -260,7 +268,7 @@ describe('OST UI store', () => {
   it('reset clears the view state of the document without touching what is persisted', () => {
     ui.setCollapsed('outcome-1', true);
     ui.select('outcome-1');
-    ui.setProduct('product-2');
+    ui.setProject('project-2');
     ui.setQuery('plan');
     ui.toggleType('evidence');
     ui.armTool('solution');
@@ -273,7 +281,7 @@ describe('OST UI store', () => {
       panelTab: 'detail',
       leftOpen: true,
       rightOpen: true,
-      productId: 'all',
+      projectId: 'all',
       collapsed: {},
       query: '',
       hiddenTypes: {},

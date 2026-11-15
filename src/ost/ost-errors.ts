@@ -10,7 +10,7 @@ const MESSAGES = {
   nodemissing: 'That node no longer exists.',
   invalidparent: 'That node cannot go there.',
   fieldnotapplicable: 'That field does not apply to this node.',
-  invalidtitle: 'Titles need 2 to 200 characters (100 for products, 500 for assumptions and evidence).',
+  invalidtitle: 'Titles need 2 to 200 characters (100 for projects, 500 for assumptions and evidence).',
   invalidnotes: 'Notes can be at most 20,000 characters.',
   invalidstatus: 'That status is not valid for this node.',
   invalidconfidence: 'Confidence must be between 0 and 100.',
@@ -46,12 +46,12 @@ export class RuleError extends Error {
 }
 
 /**
- * `type` (the node the failed write was about) makes the title rule specific: products 100,
+ * `type` (the node the failed write was about) makes the title rule specific: projects 100,
  * assumptions and evidence 500, the other types 200 characters.
  */
 export function describeError(err: unknown, fallback = 'Something went wrong. Your change was not saved.', type?: NodeType): string {
   if (!(err instanceof RuleError)) return fallback;
   if (err.key === 'invalidtitle' && type)
-    return `${type === 'product' ? 'Product names' : 'Titles'} need ${TITLE_MIN} to ${titleMax(type)} characters.`;
+    return `${type === 'project' ? 'Project names' : 'Titles'} need ${TITLE_MIN} to ${titleMax(type)} characters.`;
   return MESSAGES[err.key];
 }

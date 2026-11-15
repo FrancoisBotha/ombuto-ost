@@ -10,6 +10,7 @@ import { parseDocument, serializeDocument } from './document';
 import { AUTOSAVE_DELAY_MS, useDocumentStore } from './document.store';
 import * as files from './file-access';
 import { sampleDocument } from './sample';
+import { legacyFileText } from './small-document.test-util';
 
 vi.mock(import('./file-access'), async importOriginal => {
   const actual = await importOriginal();
@@ -79,7 +80,7 @@ describe('document store', () => {
     });
 
     it('restores the autosaved document with its name, file, dirty flag and collapsed branches', async () => {
-      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify({ 'opportunity-3': true, 'gone-99': true }));
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify({ 'opportunity-4': true, 'gone-99': true }));
       setup({ doc: sampleDocument(), dirty: true, fileName: 'meals.ost', handle: null, savedAt: '2026-01-01T10:00:00.000Z' });
       await doc.init();
       expect(doc.hasDocument).toBe(true);
@@ -88,11 +89,39 @@ describe('document store', () => {
       expect(doc.fileName).toBe('meals.ost');
       expect(doc.lastSavedAt).toBe('2026-01-01T10:00:00.000Z');
       expect(tree.loaded).toBe(true);
-      expect(tree.products).toHaveLength(1);
+      expect(tree.projects).toHaveLength(3);
       // Collapsed branches come back; entries for nodes that no longer exist are dropped.
-      expect(useOstUiStore().collapsed).toEqual({ 'opportunity-3': true });
+      expect(useOstUiStore().collapsed).toEqual({ 'opportunity-4': true });
       // Restoring is not a change: nothing is written back.
       expect(autosave.saves).toHaveLength(0);
+    });
+
+    it('restores a working copy kept by the first published build: its "product" nodes are projects', async () => {
+      // What that build left in the browser: the document as it wrote it, and its collapsed branches.
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify({ 'product-1': true }));
+      setup({ doc: JSON.parse(legacyFileText()), dirty: true, fileName: 'old.ost', handle: null, savedAt: '2026-01-01T10:00:00.000Z' });
+      expect(JSON.stringify((await autosave.current())?.doc)).toContain('"type":"product"');
+      await doc.init();
+      expect(doc.unreadable).toBeNull();
+      expect(doc.hasDocument).toBe(true);
+      expect(doc.dirty).toBe(true);
+      expect(doc.fileName).toBe('old.ost');
+      expect(tree.nodes).toHaveLength(14);
+      expect(tree.byId('project-1')).toMatchObject({ type: 'project', parent: null, title: 'Meal-planning app' });
+      expect(tree.byId('outcome-2')?.parent).toBe('project-1');
+      // The branch that was collapsed is still collapsed, under the project's new key.
+      expect(useOstUiStore().collapsed).toEqual({ 'project-1': true });
+      expect(Object.keys(tree.placed)).toEqual(['project-1']);
+
+      // The next autosave and the next save say "project".
+      await tree.patchNode('project-1', { title: 'Renamed since' });
+      await doc.flushAutosave();
+      expect(autosave.saves.at(-1)!.doc.nodes[0]).toMatchObject({ type: 'project', title: 'Renamed since' });
+      expect(JSON.stringify(autosave.saves.at(-1)!.doc)).not.toContain('product');
+      await doc.saveAs();
+      const written = io.downloadFile.mock.calls.at(-1)![1] as string;
+      expect(written).toContain('"type": "project"');
+      expect(written).not.toContain('"product"');
     });
 
     it('validates what it restores: a damaged autosave leaves the empty state, not a broken app', async () => {
@@ -119,23 +148,23 @@ describe('document store', () => {
     });
   });
 
-  describe('New tree / Load example', () => {
-    it('New starts a tree with one product in rename mode, and it is not dirty', async () => {
+  describe('New tree / Open example', () => {
+    it('New starts a tree with one project in rename mode, and it is not dirty', async () => {
       await doc.request('new');
       expect(doc.hasDocument).toBe(true);
       expect(doc.name).toBe('Untitled tree');
       expect(doc.dirty).toBe(false);
       expect(doc.fileName).toBeNull();
-      expect(tree.nodes.map(n => n.id)).toEqual(['product-1']);
+      expect(tree.nodes.map(n => n.id)).toEqual(['project-1']);
       const ui = useOstUiStore();
-      expect(ui.selectedId).toBe('product-1');
-      expect(ui.editingId).toBe('product-1');
-      // The new document (with its product) is what the browser now holds.
+      expect(ui.selectedId).toBe('project-1');
+      expect(ui.editingId).toBe('project-1');
+      // The new document (with its project) is what the browser now holds.
       expect((await autosave.current())?.doc.nodes).toHaveLength(1);
       expect((await autosave.current())?.dirty).toBe(false);
     });
 
-    it('Load example opens the built-in tree, clean and without a file', async () => {
+    it('Open example opens the built-in tree, clean and without a file', async () => {
       await doc.request('example');
       expect(doc.name).toBe('Example: meal-planning app');
       expect(doc.dirty).toBe(false);
@@ -144,7 +173,7 @@ describe('document store', () => {
     });
 
     it('every document shown gets a new session number and starts expanded', async () => {
-      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify({ 'opportunity-3': true }));
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify({ 'opportunity-4': true }));
       await doc.request('example');
       const first = doc.session;
       expect(useOstUiStore().collapsed).toEqual({});
@@ -163,12 +192,12 @@ describe('document store', () => {
 
     it('any tree edit marks the document dirty', async () => {
       expect(doc.dirty).toBe(false);
-      await tree.patchNode('product-1', { title: 'Renamed product' });
+      await tree.patchNode('project-1', { title: 'Renamed project' });
       expect(doc.dirty).toBe(true);
     });
 
     it('a refused edit does not', async () => {
-      expect(await tree.patchNode('product-1', { title: 'x' })).toBe(false);
+      expect(await tree.patchNode('project-1', { title: 'x' })).toBe(false);
       expect(doc.dirty).toBe(false);
       await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
       expect(autosave.saves).toHaveLength(0);
@@ -186,21 +215,21 @@ describe('document store', () => {
     });
 
     it('writes the working document to the browser once, shortly after a burst of edits', async () => {
-      await tree.patchNode('product-1', { title: 'One' });
+      await tree.patchNode('project-1', { title: 'One' });
       await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS - 50);
-      await tree.patchNode('product-1', { title: 'Two' });
-      await tree.createNode('product-1', 'outcome');
+      await tree.patchNode('project-1', { title: 'Two' });
+      await tree.createNode('project-1', 'outcome');
       expect(autosave.saves).toHaveLength(0);
       await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
       expect(autosave.saves).toHaveLength(1);
       const [saved] = autosave.saves;
       expect(saved.dirty).toBe(true);
       expect(saved.doc.nodes.find(n => n.id === 1)?.title).toBe('Two');
-      expect(saved.doc.nodes.filter(n => n.type === 'outcome')).toHaveLength(2);
+      expect(saved.doc.nodes.filter(n => n.type === 'outcome')).toHaveLength(4);
     });
 
     it('flushAutosave writes a pending autosave at once (the page is closing)', async () => {
-      await tree.patchNode('product-1', { title: 'Closing' });
+      await tree.patchNode('project-1', { title: 'Closing' });
       await doc.flushAutosave();
       expect(autosave.saves).toHaveLength(1);
       // Nothing pending: nothing more is written.
@@ -212,10 +241,10 @@ describe('document store', () => {
     it('a failing browser storage never breaks editing, and says that autosave is off', async () => {
       expect(doc.autosaveFailed).toBe(false);
       doc.setAutosaveStore({ load: async () => null, save: () => Promise.reject(new Error('quota')), clear: async () => undefined });
-      await tree.patchNode('product-1', { title: 'Still works' });
+      await tree.patchNode('project-1', { title: 'Still works' });
       // The flush settles, and says the browser does not hold the document.
       await expect(doc.flushAutosave()).resolves.toBe(false);
-      expect(tree.byId('product-1')?.title).toBe('Still works');
+      expect(tree.byId('project-1')?.title).toBe('Still works');
       expect(doc.autosaveFailed).toBe(true);
     });
 
@@ -223,11 +252,11 @@ describe('document store', () => {
       let full = true;
       const inner = memoryAutosave();
       doc.setAutosaveStore({ ...inner, save: record => (full ? Promise.reject(new Error('quota')) : inner.save(record)) });
-      await tree.patchNode('product-1', { title: 'One' });
+      await tree.patchNode('project-1', { title: 'One' });
       await doc.flushAutosave();
       expect(doc.autosaveFailed).toBe(true);
       full = false;
-      await tree.patchNode('product-1', { title: 'Two' });
+      await tree.patchNode('project-1', { title: 'Two' });
       await doc.flushAutosave();
       expect(doc.autosaveFailed).toBe(false);
       expect((await inner.load())?.doc.nodes.find(n => n.id === 1)?.title).toBe('Two');
@@ -236,24 +265,24 @@ describe('document store', () => {
     it('a browser with no storage to autosave into has autosave off from the start', async () => {
       doc.setAutosaveStore({ ...memoryAutosave(), persistent: false });
       expect(doc.autosaveFailed).toBe(true);
-      await tree.patchNode('product-1', { title: 'Kept in memory only' });
+      await tree.patchNode('project-1', { title: 'Kept in memory only' });
       await doc.flushAutosave();
       expect(doc.autosaveFailed).toBe(true);
     });
 
     it('what is autosaved is a plain, valid document', async () => {
-      await tree.addLink('product-1', { name: 'Site', url: 'https://example.com' });
+      await tree.addLink('project-1', { name: 'Site', url: 'https://example.com' });
       await doc.flushAutosave();
       const record = autosave.saves.at(-1)!;
       expect(() => structuredClone(record)).not.toThrow();
-      expect(parseDocument(serializeDocument(record.doc)).nodes[0].links).toHaveLength(1);
+      expect(parseDocument(serializeDocument(record.doc)).nodes[0].links).toHaveLength(2);
     });
   });
 
   describe('Save / Save as without file handles (Firefox, Safari)', () => {
     beforeEach(async () => {
       await doc.request('example');
-      await tree.patchNode('product-1', { title: 'Edited product' });
+      await tree.patchNode('project-1', { title: 'Edited project' });
     });
 
     it('Save downloads a copy named after the document and clears the dirty flag', async () => {
@@ -261,7 +290,7 @@ describe('document store', () => {
       expect(io.downloadFile).toHaveBeenCalledTimes(1);
       const [name, text] = io.downloadFile.mock.calls[0];
       expect(name).toBe('Example meal-planning app.ost');
-      expect(parseDocument(text as string).nodes[0].title).toBe('Edited product');
+      expect(parseDocument(text as string).nodes[0].title).toBe('Edited project');
       expect(doc.dirty).toBe(false);
       expect(doc.fileName).toBe('Example meal-planning app.ost');
       expect(doc.savesInPlace).toBe(false);
@@ -271,7 +300,7 @@ describe('document store', () => {
 
     it('a later edit makes it dirty again', async () => {
       await doc.save();
-      await tree.patchNode('product-1', { title: 'Edited again' });
+      await tree.patchNode('project-1', { title: 'Edited again' });
       expect(doc.dirty).toBe(true);
     });
 
@@ -287,14 +316,14 @@ describe('document store', () => {
     beforeEach(async () => {
       io.supportsFileHandles.mockReturnValue(true);
       await doc.request('example');
-      await tree.patchNode('product-1', { title: 'Edited product' });
+      await tree.patchNode('project-1', { title: 'Edited project' });
     });
 
     it('the first Save asks where to save, then keeps the handle', async () => {
       const handle = fakeHandle('meals.ost');
       io.pickFileToSave.mockResolvedValue(handle);
       expect(await doc.save()).toBe(true);
-      expect(io.pickFileToSave).toHaveBeenCalledWith('Example meal-planning app.ost', expect.stringContaining('"Edited product"'));
+      expect(io.pickFileToSave).toHaveBeenCalledWith('Example meal-planning app.ost', expect.stringContaining('"Edited project"'));
       expect(doc.fileName).toBe('meals.ost');
       expect(doc.savesInPlace).toBe(true);
       expect(doc.dirty).toBe(false);
@@ -305,7 +334,7 @@ describe('document store', () => {
       const handle = fakeHandle('meals.ost');
       io.pickFileToSave.mockResolvedValue(handle);
       await doc.save();
-      await tree.patchNode('product-1', { title: 'Second edit' });
+      await tree.patchNode('project-1', { title: 'Second edit' });
       io.writeToHandle.mockResolvedValue(undefined);
       expect(await doc.save()).toBe(true);
       expect(io.pickFileToSave).toHaveBeenCalledTimes(1);
@@ -324,7 +353,7 @@ describe('document store', () => {
     it('when the file can no longer be written, Save asks where to save instead', async () => {
       io.pickFileToSave.mockResolvedValue(fakeHandle('meals.ost'));
       await doc.save();
-      await tree.patchNode('product-1', { title: 'Third edit' });
+      await tree.patchNode('project-1', { title: 'Third edit' });
       io.writeToHandle.mockRejectedValue(new DOMException('gone', 'NotFoundError'));
       io.pickFileToSave.mockResolvedValue(fakeHandle('elsewhere.ost'));
       expect(await doc.save()).toBe(true);
@@ -355,6 +384,20 @@ describe('document store', () => {
       expect((await autosave.current())?.fileName).toBe('meals.ost');
     });
 
+    it('opens a file saved by the first published build ("type": "product") as a clean tree of projects', async () => {
+      io.pickFileToOpen.mockResolvedValue({ text: legacyFileText(), fileName: 'old.ost', handle: null });
+      await doc.request('open');
+      expect(doc.error).toBeNull();
+      expect(doc.fileName).toBe('old.ost');
+      expect(doc.dirty).toBe(false);
+      expect(tree.roots.map(p => p.id)).toEqual(['project-1']);
+      expect(tree.nodes).toHaveLength(14);
+      // It is an ordinary tree now: a sub-project can go straight into it.
+      expect(await tree.createNode('project-1', 'project', 'New area')).toBe('project-15');
+      await doc.flushAutosave();
+      expect((await autosave.current())?.doc.nodes.filter(n => n.type === 'project').map(n => n.id)).toEqual([1, 15]);
+    });
+
     it('cancelling the picker changes nothing', async () => {
       await doc.request('example');
       io.pickFileToOpen.mockResolvedValue(null);
@@ -365,11 +408,11 @@ describe('document store', () => {
 
     it('refuses a file that is not an Ombuto OST tree, with a clear message, and keeps the open document', async () => {
       await doc.request('example');
-      await tree.patchNode('product-1', { title: 'Mine' });
+      await tree.patchNode('project-1', { title: 'Mine' });
       io.pickFileToOpen.mockResolvedValue({ text: '{"some":"json"}', fileName: 'other.json', handle: null });
       expect(await doc.openFile()).toBe(false);
       expect(doc.error).toBe('This file is not an Ombuto OST tree.');
-      expect(tree.byId('product-1')?.title).toBe('Mine');
+      expect(tree.byId('project-1')?.title).toBe('Mine');
       expect(doc.dirty).toBe(true);
       expect(doc.fileName).toBeNull();
     });
@@ -396,13 +439,13 @@ describe('document store', () => {
   describe('replacing a document that has unsaved changes', () => {
     beforeEach(async () => {
       await doc.request('example');
-      await tree.patchNode('product-1', { title: 'Unsaved work' });
+      await tree.patchNode('project-1', { title: 'Unsaved work' });
     });
 
     it.each(['new', 'open', 'example'] as const)('%s waits for the user instead of replacing it', async action => {
       await doc.request(action);
       expect(doc.pendingAction).toBe(action);
-      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
       expect(io.pickFileToOpen).not.toHaveBeenCalled();
     });
 
@@ -410,7 +453,7 @@ describe('document store', () => {
       await doc.request('new');
       await doc.resolvePending('cancel');
       expect(doc.pendingAction).toBeNull();
-      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
       expect(doc.dirty).toBe(true);
     });
 
@@ -430,7 +473,7 @@ describe('document store', () => {
       await doc.resolvePending('save');
       expect(String(io.pickFileToSave.mock.calls[0][1])).toContain('Unsaved work');
       expect(doc.pendingAction).toBeNull();
-      expect(tree.byId('product-1')?.title).toBe('Meal-planning app');
+      expect(tree.byId('project-1')?.title).toBe('Meal-planning app');
       expect(doc.dirty).toBe(false);
     });
 
@@ -442,12 +485,12 @@ describe('document store', () => {
       // The app cannot see whether the download arrived: the tree is still the open one.
       expect(doc.pendingAction).toBe('example');
       expect(doc.pendingDownloaded).toBe(true);
-      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
       // "Carry on".
       await doc.resolvePending('discard');
       expect(doc.pendingAction).toBeNull();
       expect(doc.pendingDownloaded).toBe(false);
-      expect(tree.byId('product-1')?.title).toBe('Meal-planning app');
+      expect(tree.byId('project-1')?.title).toBe('Meal-planning app');
       expect(doc.dirty).toBe(false);
     });
 
@@ -456,7 +499,7 @@ describe('document store', () => {
       await doc.resolvePending('save');
       await doc.resolvePending('cancel');
       expect(doc.pendingAction).toBeNull();
-      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
       expect(doc.savedBy).toBe('download');
     });
 
@@ -465,7 +508,7 @@ describe('document store', () => {
       io.pickFileToSave.mockResolvedValue(null);
       await doc.request('new');
       await doc.resolvePending('save');
-      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
       expect(doc.dirty).toBe(true);
     });
 

@@ -18,6 +18,7 @@ import { useDocumentStore } from './document.store';
 import * as files from './file-access';
 import { registerPendingEdit } from './pending-edits';
 import { sampleDocument } from './sample';
+import { legacyFileText } from './small-document.test-util';
 
 vi.mock(import('./file-access'), async importOriginal => {
   const actual = await importOriginal();
@@ -51,9 +52,9 @@ const node = (id: number, type: string, parentId: number | null, extra: object =
 });
 const fileText = (nodes: object[]) => JSON.stringify({ format: 'ombuto-ost', version: 1, name: 'From a file', nodes });
 
-/** product > outcome > a chain of `levels - 2` opportunities. */
+/** project > outcome > a chain of `levels - 2` opportunities. */
 function chain(levels: number) {
-  const nodes = [node(1, 'product', null), node(2, 'outcome', 1)];
+  const nodes = [node(1, 'project', null), node(2, 'outcome', 1)];
   for (let id = 3; id <= levels; id++) nodes.push(node(id, 'opportunity', id - 1));
   return nodes;
 }
@@ -80,7 +81,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
   /** An open tree with one unsaved edit. */
   async function openWork() {
     await doc.request('example');
-    await tree.patchNode('product-1', { title: 'My work' });
+    await tree.patchNode('project-1', { title: 'My work' });
     await doc.flushAutosave();
     saves.length = 0;
   }
@@ -99,7 +100,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       ['a 3,000-level chain', () => fileText(chain(3000)), /more than|levels deep/],
       [
         'more nodes than the limit',
-        () => fileText([node(1, 'product', null), ...Array.from({ length: MAX_NODES }, (_, i) => node(i + 2, 'outcome', 1))]),
+        () => fileText([node(1, 'project', null), ...Array.from({ length: MAX_NODES }, (_, i) => node(i + 2, 'outcome', 1))]),
         /more than/,
       ],
       ['not a tree at all', () => '{"hello":"world"}', /not an Ombuto OST tree/],
@@ -110,7 +111,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       expect(await doc.openFile()).toBe(false);
       expect(doc.error).toMatch(message);
       expect(doc.name).toBe('Example: meal-planning app');
-      expect(tree.byId('product-1')?.title).toBe('My work');
+      expect(tree.byId('project-1')?.title).toBe('My work');
       expect(doc.dirty).toBe(true);
       expect(tree.loaded).toBe(true);
       expect(saves).toHaveLength(0);
@@ -121,7 +122,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       expect(await doc.openFile()).toBe(true);
       expect(tree.nodes).toHaveLength(MAX_DEPTH);
       expect(tree.placed[`opportunity-${MAX_DEPTH}`].depth).toBe(MAX_DEPTH - 1);
-      expect(tree.descendantCount('product-1')).toBe(MAX_DEPTH - 1);
+      expect(tree.descendantCount('project-1')).toBe(MAX_DEPTH - 1);
       // One level more is refused where it would be made, with a message.
       expect(await tree.createNode(`opportunity-${MAX_DEPTH}`, 'opportunity')).toBeNull();
       expect(tree.error).toMatch(/levels deep/);
@@ -136,7 +137,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       io.pickFileToOpen.mockResolvedValue(opened(serializeDocument(sampleDocument())));
       expect(await doc.openFile()).toBe(false);
       expect(doc.error).toMatch(/cannot be opened/);
-      expect(tree.byId('product-1')?.title).toBe('My work');
+      expect(tree.byId('project-1')?.title).toBe('My work');
       expect(doc.service.snapshot()?.nodes[0].title).toBe('My work');
       expect(saves).toHaveLength(0);
     });
@@ -202,25 +203,47 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
 
   describe('each tab keeps the collapsed branches of its own working copy', () => {
     it('reads and writes them under its slot', async () => {
-      localStorage.setItem(slotCollapsedKey('tab-1'), JSON.stringify({ 'opportunity-3': true }));
-      localStorage.setItem(slotCollapsedKey('tab-2'), JSON.stringify({ 'outcome-2': true }));
+      localStorage.setItem(slotCollapsedKey('tab-1'), JSON.stringify({ 'opportunity-4': true }));
+      localStorage.setItem(slotCollapsedKey('tab-2'), JSON.stringify({ 'outcome-3': true }));
       const inner = memoryAutosave({ doc: sampleDocument(), dirty: false, fileName: null, handle: null, savedAt: null });
       setup({ ...inner, slotId: () => 'tab-1' });
       await doc.init();
       const ui = useOstUiStore();
-      expect(ui.collapsed).toEqual({ 'opportunity-3': true });
-      ui.setCollapsed('outcome-2', true);
-      expect(JSON.parse(localStorage.getItem(slotCollapsedKey('tab-1'))!)).toEqual({ 'opportunity-3': true, 'outcome-2': true });
-      expect(JSON.parse(localStorage.getItem(slotCollapsedKey('tab-2'))!)).toEqual({ 'outcome-2': true });
+      expect(ui.collapsed).toEqual({ 'opportunity-4': true });
+      ui.setCollapsed('outcome-3', true);
+      expect(JSON.parse(localStorage.getItem(slotCollapsedKey('tab-1'))!)).toEqual({ 'opportunity-4': true, 'outcome-3': true });
+      expect(JSON.parse(localStorage.getItem(slotCollapsedKey('tab-2'))!)).toEqual({ 'outcome-3': true });
+      ui.useCollapsedKey(COLLAPSED_STORAGE_KEY);
+    });
+
+    it("a tab's own working copy from the first published build comes back with its products as projects", async () => {
+      localStorage.setItem(slotCollapsedKey('tab-1'), JSON.stringify({ 'product-1': true }));
+      localStorage.setItem(slotCollapsedKey('tab-2'), JSON.stringify({ 'product-1': true, 'outcome-2': true }));
+      const inner = memoryAutosave({ doc: JSON.parse(legacyFileText()), dirty: true, fileName: null, handle: null, savedAt: null });
+      setup({ ...inner, slotId: () => 'tab-1' });
+      await doc.init();
+      const ui = useOstUiStore();
+      expect(doc.unreadable).toBeNull();
+      expect(doc.dirty).toBe(true);
+      expect(tree.byId('project-1')?.type).toBe('project');
+      expect(ui.collapsed).toEqual({ 'project-1': true });
+      // Restoring writes nothing; the first change rewrites this tab's copy, and only this tab's.
+      expect(saves).toHaveLength(0);
+      ui.setCollapsed('project-1', false);
+      expect(JSON.parse(localStorage.getItem(slotCollapsedKey('tab-1'))!)).toEqual({});
+      expect(JSON.parse(localStorage.getItem(slotCollapsedKey('tab-2'))!)).toEqual({ 'product-1': true, 'outcome-2': true });
+      await tree.patchNode('project-1', { title: 'Still mine' });
+      await doc.flushAutosave();
+      expect(saves.at(-1)!.doc.nodes[0]).toMatchObject({ type: 'project', title: 'Still mine' });
       ui.useCollapsedKey(COLLAPSED_STORAGE_KEY);
     });
 
     it('the collapsed branches of the single working copy of version 1 move with it', async () => {
-      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify({ 'opportunity-3': true }));
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify({ 'opportunity-4': true }));
       const inner = memoryAutosave({ doc: sampleDocument(), dirty: false, fileName: null, handle: null, savedAt: null });
       setup({ ...inner, slotId: () => MIGRATED_SLOT_ID });
       await doc.init();
-      expect(useOstUiStore().collapsed).toEqual({ 'opportunity-3': true });
+      expect(useOstUiStore().collapsed).toEqual({ 'opportunity-4': true });
       expect(localStorage.getItem(COLLAPSED_STORAGE_KEY)).toBeNull();
       expect(localStorage.getItem(slotCollapsedKey(MIGRATED_SLOT_ID))).not.toBeNull();
       useOstUiStore().useCollapsedKey(COLLAPSED_STORAGE_KEY);
@@ -234,7 +257,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       let choose!: (handle: FileSystemFileHandle) => void;
       io.pickFileToSave.mockReturnValue(new Promise(resolve => (choose = resolve)));
       const saving = doc.saveAs();
-      await tree.patchNode('product-1', { title: 'Edited while the picker was open' });
+      await tree.patchNode('project-1', { title: 'Edited while the picker was open' });
       choose(fakeHandle('work.ost'));
       expect(await saving).toBe(true);
       // What reached the file is the document as it was when Save was chosen.
@@ -252,11 +275,11 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       io.supportsFileHandles.mockReturnValue(true);
       io.pickFileToSave.mockResolvedValue(fakeHandle('work.ost'));
       await doc.save();
-      await tree.patchNode('product-1', { title: 'Second' });
+      await tree.patchNode('project-1', { title: 'Second' });
       let finish!: () => void;
       io.writeToHandle.mockReturnValue(new Promise(resolve => (finish = resolve)));
       const saving = doc.save();
-      await tree.patchNode('product-1', { title: 'Third, during the write' });
+      await tree.patchNode('project-1', { title: 'Third, during the write' });
       finish();
       expect(await saving).toBe(true);
       expect(doc.dirty).toBe(true);
@@ -285,7 +308,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       const handle = fakeHandle('shared.ost');
       io.pickFileToOpen.mockResolvedValue(opened(serializeDocument(sampleDocument()), { fileName: 'shared.ost', handle, stamp: '100:10' }));
       await doc.openFile();
-      await tree.patchNode('product-1', { title: 'Mine' });
+      await tree.patchNode('project-1', { title: 'Mine' });
       io.writeToHandle.mockRejectedValue(new files.FileChangedError());
       io.pickFileToSave.mockResolvedValue(null); // the user closes the picker
       expect(await doc.save()).toBe(false);
@@ -301,9 +324,9 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       await doc.openFile();
       io.writeToHandle.mockResolvedValue(undefined);
       io.fileStamp.mockResolvedValue('200:12');
-      await tree.patchNode('product-1', { title: 'One' });
+      await tree.patchNode('project-1', { title: 'One' });
       await doc.save();
-      await tree.patchNode('product-1', { title: 'Two' });
+      await tree.patchNode('project-1', { title: 'Two' });
       await doc.save();
       expect(io.writeToHandle).toHaveBeenLastCalledWith(handle, expect.any(String), '200:12');
     });
@@ -311,7 +334,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
 
   describe('text still being typed in a field', () => {
     /** A field holding a draft: flushing it puts the text in the document. */
-    const typing = (text: string) => registerPendingEdit(() => void tree.patchNode('product-1', { note: text }));
+    const typing = (text: string) => registerPendingEdit(() => void tree.patchNode('project-1', { note: text }));
 
     it.each(['new', 'open', 'example'] as const)('%s: counts as an unsaved change, so the user is asked first', async action => {
       await doc.request('example');
@@ -321,7 +344,7 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       done();
       expect(doc.pendingAction).toBe(action);
       expect(io.pickFileToOpen).not.toHaveBeenCalled();
-      expect(tree.byId('product-1')?.note).toBe('typed, not blurred');
+      expect(tree.byId('project-1')?.note).toBe('typed, not blurred');
     });
 
     it('Save and Save as write it to the file', async () => {
@@ -355,14 +378,14 @@ describe('document store: nothing is lost, nothing unreadable is saved', () => {
       expect(await doc.flushAutosave()).toBe(true);
       doc.clearToReload();
       expect(doc.warnsBeforeLeaving()).toBe(false);
-      await tree.patchNode('product-1', { title: 'One more edit' });
+      await tree.patchNode('project-1', { title: 'One more edit' });
       expect(doc.warnsBeforeLeaving()).toBe(true);
     });
 
     it('flushAutosave is false when the browser did not keep the document', async () => {
       setup({ ...memoryAutosave(), save: () => Promise.reject(new Error('quota')) });
       await doc.request('example');
-      await tree.patchNode('product-1', { title: 'Edited' });
+      await tree.patchNode('project-1', { title: 'Edited' });
       expect(await doc.flushAutosave()).toBe(false);
       expect(doc.warnsBeforeLeaving()).toBe(true);
     });

@@ -6,7 +6,7 @@ import type { NodeType, OstNode } from './types';
 
 /** Node box geometry used by the tidy layout. Keep in sync with OstNode.vue. */
 export const TYPE_BOX: Record<NodeType, { label: string; w: number; h: number }> = {
-  product: { label: 'Product', w: 244, h: 60 },
+  project: { label: 'Project', w: 244, h: 60 },
   outcome: { label: 'Outcome', w: 238, h: 92 },
   opportunity: { label: 'Opportunity', w: 218, h: 100 },
   solution: { label: 'Solution', w: 206, h: 88 },
@@ -16,7 +16,7 @@ export const TYPE_BOX: Record<NodeType, { label: string; w: number; h: number }>
 
 /** The only legal parent -> child relationships. Enforce on create AND on re-parent. */
 export const ALLOWED: Record<NodeType, NodeType[]> = {
-  product: ['outcome'],
+  project: ['outcome', 'project'],
   outcome: ['opportunity'],
   opportunity: ['opportunity', 'solution', 'evidence'],
   solution: ['assumption'],
@@ -26,17 +26,17 @@ export const ALLOWED: Record<NodeType, NodeType[]> = {
 
 /** Palette hints: where each type may be attached. */
 export const PALETTE_HINT: Record<NodeType, string> = {
-  product: 'A product starts its own branch of the tree.',
-  outcome: 'Attach under a product.',
+  project: 'Attach under a project. For a top-level project use “+ Project” above.',
+  outcome: 'Attach under a project.',
   opportunity: 'Attach under an outcome or another opportunity.',
   solution: 'Attach under an opportunity.',
   assumption: 'Attach under a solution.',
   evidence: 'Customer evidence goes under an opportunity; test results under an assumption.',
 };
 
-/** Status vocabularies. Outcomes and products deliberately have none. */
+/** Status vocabularies. Outcomes and projects deliberately have none. */
 export const STATUS: Record<NodeType, string[]> = {
-  product: [],
+  project: [],
   outcome: [],
   opportunity: ['unexplored', 'exploring', 'validated', 'parked'],
   solution: ['candidate', 'exploring', 'devready', 'building', 'shipped', 'dropped'],
@@ -78,7 +78,10 @@ export function isDescendant(id: string, ofId: string, nodes: OstNode[]): boolea
   return false;
 }
 
-/** Full re-parent guard: no self, no descendant, type must be permitted. */
+/**
+ * Full re-parent guard: no self, no descendant (so a project can never end up inside its own
+ * sub-project), type must be permitted.
+ */
 export function canReparent(dragId: string, targetId: string, nodes: OstNode[]) {
   if (dragId === targetId) return false;
   const drag = nodes.find(n => n.id === dragId);

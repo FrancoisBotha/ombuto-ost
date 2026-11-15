@@ -16,8 +16,11 @@ import type { Point, Viewport } from './useViewport';
 /** Client point → the legal node a new `type` would attach under there, or null. */
 export type ResolveTarget = (...args: [type: NodeType, clientX: number, clientY: number]) => string | null;
 
-/** Types the palette offers, in tree order (a product attaches to nothing: the toolbar adds those). */
-export const CREATABLE_TYPES: NodeType[] = ['outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
+/**
+ * Types the palette offers, in tree order. A palette project is a sub-project (it attaches under a
+ * project); a top-level project attaches to nothing, so the toolbar's “+ Project” adds those.
+ */
+export const CREATABLE_TYPES: NodeType[] = ['project', 'outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
 
 /** The + menu of a node: exactly its permitted child types. */
 export const childTypesFor = (parentType: NodeType): NodeType[] => [...ALLOWED[parentType]];
@@ -56,7 +59,7 @@ export function boxAt(point: Point, placed: Record<string, Placed>, exclude?: st
 /**
  * Every node `dragKey` may be re-parented under, in one pass (same rule as rules.canReparent):
  * never itself, its current parent or one of its descendants, and only a parent type that permits
- * the dragged type. Products have no legal parent.
+ * the dragged type. A project may go under any project outside its own subtree.
  */
 export function legalParents(dragKey: string, nodes: OstNode[]): Set<string> {
   const legal = new Set<string>();
@@ -107,9 +110,9 @@ export function dropTargetAt(
 
 export const TITLE_MIN = 2;
 
-/** Title limits: products 100, assumptions + evidence 500, everything else 200. */
+/** Title limits: projects 100, assumptions + evidence 500, everything else 200. */
 export function titleMax(type: NodeType): number {
-  if (type === 'product') return 100;
+  if (type === 'project') return 100;
   return type === 'assumption' || type === 'evidence' ? 500 : 200;
 }
 

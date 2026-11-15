@@ -7,7 +7,6 @@ import {
   childCounts,
   edgeKind,
   isDimmed,
-  isDraggable,
   laidOutNodes,
   matchesQuery,
   minimapToFlow,
@@ -120,31 +119,31 @@ describe('useViewport maths', () => {
 
     it('returns null when nothing is laid out or the canvas has no size', () => {
       expect(fitViewport({}, [], size)).toBeNull();
-      const placed = layoutTree(sampleNodes(), { roots: ['product-1'], collapsed: {} });
-      expect(fitViewport(placed, ['product-1'], { width: 0, height: 0 })).toBeNull();
+      const placed = layoutTree(sampleNodes(), { roots: ['project-1'], collapsed: {} });
+      expect(fitViewport(placed, ['project-1'], { width: 0, height: 0 })).toBeNull();
     });
 
     it('centres a small branch horizontally, 28px from the top, never above 1.1', () => {
-      const placed = layoutTree([node('product-1', null)], { roots: ['product-1'], collapsed: {} });
-      const v = fitViewport(placed, ['product-1'], size)!;
+      const placed = layoutTree([node('project-1', null)], { roots: ['project-1'], collapsed: {} });
+      const v = fitViewport(placed, ['project-1'], size)!;
       expect(v.zoom).toBe(FIT_MAX);
       expect(v.y).toBe(28);
-      const p = placed['product-1'];
-      // the product's centre sits in the middle of the canvas
+      const p = placed['project-1'];
+      // the project's centre sits in the middle of the canvas
       expect(p.x * v.zoom + v.x).toBeCloseTo(size.width / 2, 6);
     });
 
     it('never zooms below the 0.68 floor; a wide branch centres on its roots', () => {
-      const wide = [node('product-1', null), ...Array.from({ length: 30 }, (_, i) => node(`outcome-${i + 10}`, 'product-1'))];
-      const placed = layoutTree(wide, { roots: ['product-1'], collapsed: {} });
-      const v = fitViewport(placed, ['product-1'], size)!;
+      const wide = [node('project-1', null), ...Array.from({ length: 30 }, (_, i) => node(`outcome-${i + 10}`, 'project-1'))];
+      const placed = layoutTree(wide, { roots: ['project-1'], collapsed: {} });
+      const v = fitViewport(placed, ['project-1'], size)!;
       expect(v.zoom).toBe(FIT_FLOOR);
-      expect(placed['product-1'].x * v.zoom + v.x).toBeCloseTo(size.width / 2, 6);
+      expect(placed['project-1'].x * v.zoom + v.x).toBeCloseTo(size.width / 2, 6);
     });
 
     it('frames every laid-out box when it fits', () => {
-      const placed = layoutTree(sampleNodes(), { roots: ['product-1'], collapsed: {} });
-      const v = fitViewport(placed, ['product-1'], { width: 3000, height: 1400 })!;
+      const placed = layoutTree(sampleNodes(), { roots: ['project-1'], collapsed: {} });
+      const v = fitViewport(placed, ['project-1'], { width: 3000, height: 1400 })!;
       for (const p of Object.values(placed)) {
         expect((p.x - p.w / 2) * v.zoom + v.x).toBeGreaterThanOrEqual(0);
         expect((p.x + p.w / 2) * v.zoom + v.x).toBeLessThanOrEqual(3000);
@@ -165,27 +164,28 @@ describe('canvas-model', () => {
   const nodes = sampleNodes();
 
   it('positions come from the layout (centre x → top-left) and collapsed subtrees vanish', () => {
-    const placed = layoutTree(nodes, { roots: ['product-1'], collapsed: { 'solution-1': true } });
+    const placed = layoutTree(nodes, { roots: ['project-1'], collapsed: { 'solution-1': true } });
     const visible = laidOutNodes(nodes, placed);
     expect(visible.map(n => n.id)).not.toContain('assumption-1');
-    expect(visible.map(n => n.id)).not.toContain('product-2');
+    expect(visible.map(n => n.id)).not.toContain('project-2');
     const flow = toFlowNodes(visible, placed);
     const opp = flow.find(f => f.id === 'opportunity-1')!;
     expect(opp.position).toEqual({ x: placed['opportunity-1'].x - 109, y: placed['opportunity-1'].y });
     expect(flow.every(f => f.draggable === false && f.type === 'ost')).toBe(true);
   });
 
-  it('every node may be dragged, except a product', () => {
-    const placed = layoutTree(nodes, { roots: ['product-1'], collapsed: {} });
-    const flow = toFlowNodes(laidOutNodes(nodes, placed), placed, isDraggable);
-    expect(flow.find(f => f.id === 'product-1')!.draggable).toBe(false);
-    expect(flow.filter(f => f.id !== 'product-1').every(f => f.draggable)).toBe(true);
+  it('a node may be dragged when the canvas says so (every type, projects too: a project nests under a project)', () => {
+    const placed = layoutTree(nodes, { roots: ['project-1'], collapsed: {} });
+    const flow = toFlowNodes(laidOutNodes(nodes, placed), placed, n => n.id !== 'outcome-1');
+    expect(flow.find(f => f.id === 'outcome-1')!.draggable).toBe(false);
+    expect(flow.filter(f => f.id !== 'outcome-1').every(f => f.draggable)).toBe(true);
+    expect(toFlowNodes(laidOutNodes(nodes, placed), placed).some(f => f.draggable)).toBe(false);
     // Vue Flow's wrapper never takes focus: the node body does.
     expect(flow.every(f => f.focusable === false)).toBe(true);
   });
 
   it('builds one orthogonal edge per laid-out child with the child-type style', () => {
-    const placed = layoutTree(nodes, { roots: ['product-1'], collapsed: {} });
+    const placed = layoutTree(nodes, { roots: ['project-1'], collapsed: {} });
     const edges = toFlowEdges(laidOutNodes(nodes, placed), placed);
     expect(edges).toHaveLength(Object.keys(placed).length - 1);
     const e = edges.find(x => x.target === 'solution-1')!;
@@ -218,7 +218,7 @@ describe('canvas-model', () => {
   });
 
   it('minimap maps flow ↔ map coordinates consistently', () => {
-    const placed = layoutTree(nodes, { roots: ['product-1', 'product-2'], collapsed: {} });
+    const placed = layoutTree(nodes, { roots: ['project-1', 'project-2'], collapsed: {} });
     const t = minimapTransform(placed)!;
     expect(minimapTransform({})).toBeNull();
     const p = placed['opportunity-1'];

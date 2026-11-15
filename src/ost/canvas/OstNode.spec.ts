@@ -23,7 +23,7 @@ const bg = (el: Element) => el.getAttribute('data-color');
 describe('OstNode', () => {
   describe('frames', () => {
     const cases: [NodeType, string, number][] = [
-      ['product', 'Product', 244],
+      ['project', 'Project', 244],
       ['outcome', 'Outcome', 238],
       ['opportunity', 'Opportunity', 218],
       ['solution', 'Solution', 206],
@@ -32,7 +32,7 @@ describe('OstNode', () => {
     ];
 
     it.each(cases)('%s gets its own frame class, kicker and box width', (type, label, width) => {
-      const wrapper = mountNode(node(`${type}-1`, type === 'product' ? null : 'x-1'));
+      const wrapper = mountNode(node(`${type}-1`, type === 'project' ? null : 'x-1'));
       const root = wrapper.get('.ost-node');
       expect(root.classes()).toContain(`ost-node--${type}`);
       // exactly one frame class
@@ -43,12 +43,12 @@ describe('OstNode', () => {
     });
 
     it('shows the title', () => {
-      const wrapper = mountNode(node('outcome-1', 'product-1', { title: 'Teams interview weekly' }));
+      const wrapper = mountNode(node('outcome-1', 'project-1', { title: 'Teams interview weekly' }));
       expect(wrapper.get('[data-cy="ost-node-title"]').text()).toBe('Teams interview weekly');
     });
 
-    it('products have no meta row', () => {
-      const wrapper = mountNode(node('product-1', null));
+    it('projects have no meta row', () => {
+      const wrapper = mountNode(node('project-1', null));
       expect(wrapper.find('.ost-node__meta').exists()).toBe(false);
       expect(wrapper.find('.ost-node__meta').exists()).toBe(false);
     });
@@ -82,7 +82,7 @@ describe('OstNode', () => {
     });
 
     it('no badge without a status', () => {
-      expect(mountNode(node('outcome-1', 'product-1')).find('[data-cy="ost-node-status"]').exists()).toBe(false);
+      expect(mountNode(node('outcome-1', 'project-1')).find('[data-cy="ost-node-status"]').exists()).toBe(false);
     });
   });
 
@@ -99,7 +99,7 @@ describe('OstNode', () => {
     });
 
     it('outcomes and evidence show no metric', () => {
-      expect(mountNode(node('outcome-1', 'product-1')).find('[data-cy="ost-node-metric"]').exists()).toBe(false);
+      expect(mountNode(node('outcome-1', 'project-1')).find('[data-cy="ost-node-metric"]').exists()).toBe(false);
       expect(mountNode(node('evidence-1', 'opportunity-1')).find('[data-cy="ost-node-metric"]').exists()).toBe(false);
     });
   });
@@ -171,8 +171,8 @@ describe('OstNode', () => {
 
   describe('+ button', () => {
     it('renders only when canAdd and emits add', async () => {
-      expect(mountNode(node('outcome-1', 'product-1')).find('[data-cy="ost-node-add-outcome-1"]').exists()).toBe(false);
-      const wrapper = mountNode(node('outcome-1', 'product-1'), { canAdd: true });
+      expect(mountNode(node('outcome-1', 'project-1')).find('[data-cy="ost-node-add-outcome-1"]').exists()).toBe(false);
+      const wrapper = mountNode(node('outcome-1', 'project-1'), { canAdd: true });
       await wrapper.get('[data-cy="ost-node-add-outcome-1"]').trigger('click');
       expect(wrapper.emitted('add')).toHaveLength(1);
     });
@@ -180,18 +180,18 @@ describe('OstNode', () => {
 
   describe('collapse chip', () => {
     it('is absent without children', () => {
-      expect(mountNode(node('outcome-1', 'product-1')).find('[data-cy="ost-collapse-outcome-1"]').exists()).toBe(false);
+      expect(mountNode(node('outcome-1', 'project-1')).find('[data-cy="ost-collapse-outcome-1"]').exists()).toBe(false);
     });
 
     it('shows – when expanded and +n when collapsed, and emits toggle', async () => {
-      const expanded = mountNode(node('outcome-1', 'product-1'), { childCount: 3 });
+      const expanded = mountNode(node('outcome-1', 'project-1'), { childCount: 3 });
       const chip = expanded.get('[data-cy="ost-collapse-outcome-1"]');
       expect(chip.text()).toBe('–');
       expect(chip.attributes('aria-expanded')).toBe('true');
       await chip.trigger('click');
       expect(expanded.emitted('toggle')).toHaveLength(1);
 
-      const collapsed = mountNode(node('outcome-1', 'product-1'), { childCount: 3, collapsed: true });
+      const collapsed = mountNode(node('outcome-1', 'project-1'), { childCount: 3, collapsed: true });
       const c = collapsed.get('[data-cy="ost-collapse-outcome-1"]');
       expect(c.text()).toBe('+3');
       expect(c.classes()).toContain('is-collapsed');
@@ -220,15 +220,15 @@ describe('OstNode', () => {
 
   describe('collapse chip names', () => {
     it('says what it does, not "–" / "+n"', () => {
-      const open = mountNode(node('outcome-1', 'product-1'), { childCount: 3 }).get('[data-cy="ost-collapse-outcome-1"]');
+      const open = mountNode(node('outcome-1', 'project-1'), { childCount: 3 }).get('[data-cy="ost-collapse-outcome-1"]');
       expect(open.attributes('aria-label')).toBe('Collapse');
-      const shut = mountNode(node('outcome-1', 'product-1'), { childCount: 3, collapsed: true }).get('[data-cy="ost-collapse-outcome-1"]');
+      const shut = mountNode(node('outcome-1', 'project-1'), { childCount: 3, collapsed: true }).get('[data-cy="ost-collapse-outcome-1"]');
       // `childCount` is the node's DIRECT children, while collapsing hides
       // the whole subtree. The name used to say "3 hidden", which is false whenever any of those
       // three has children of its own.
       expect(shut.attributes('aria-label')).toBe('Expand, 3 children');
       expect(shut.attributes('title')).toBe('Expand (3 children)');
-      const one = mountNode(node('outcome-2', 'product-1'), { childCount: 1, collapsed: true }).get('[data-cy="ost-collapse-outcome-2"]');
+      const one = mountNode(node('outcome-2', 'project-1'), { childCount: 1, collapsed: true }).get('[data-cy="ost-collapse-outcome-2"]');
       expect(one.attributes('aria-label')).toBe('Expand, 1 child');
     });
   });
@@ -272,7 +272,7 @@ describe('OstNode', () => {
     });
 
     it('ignores keys that come from its own buttons', async () => {
-      const wrapper = mountNode(node('outcome-1', 'product-1'), { canAdd: true });
+      const wrapper = mountNode(node('outcome-1', 'project-1'), { canAdd: true });
       await wrapper.get('[data-cy="ost-node-add-outcome-1"]').trigger('keydown', { key: 'Enter' });
       expect(wrapper.emitted('activate')).toBeUndefined();
     });
@@ -280,13 +280,13 @@ describe('OstNode', () => {
 
   describe('rename', () => {
     it('a double-click on the title asks to rename', async () => {
-      const wrapper = mountNode(node('outcome-1', 'product-1'));
+      const wrapper = mountNode(node('outcome-1', 'project-1'));
       await wrapper.get('[data-cy="ost-node-title"]').trigger('dblclick');
       expect(wrapper.emitted('rename')).toHaveLength(1);
     });
 
     it('editing swaps the title for the rename field and relays commit / cancel', async () => {
-      const wrapper = mountNode(node('outcome-1', 'product-1', { title: 'Old' }), { editing: true });
+      const wrapper = mountNode(node('outcome-1', 'project-1', { title: 'Old' }), { editing: true });
       expect(wrapper.find('[data-cy="ost-node-title"]').exists()).toBe(false);
       const input = wrapper.get('[data-cy="ost-rename-input"]');
       expect((input.element as HTMLInputElement).value).toBe('Old');
@@ -296,7 +296,7 @@ describe('OstNode', () => {
     });
 
     it('reopens with a refused draft and its message', () => {
-      const wrapper = mountNode(node('outcome-1', 'product-1', { title: 'Old' }), {
+      const wrapper = mountNode(node('outcome-1', 'project-1', { title: 'Old' }), {
         editing: true,
         editDraft: 'Refused',
         editError: 'Nope.',

@@ -21,7 +21,7 @@ vi.mock('./raster', async importOriginal => ({
 const saved = vi.mocked(downloadFile);
 const rasterise = vi.mocked(svgToPng);
 
-const EMPTY = 'There is nothing to export yet. Add a product to the tree first.';
+const EMPTY = 'There is nothing to export yet. Add a project to the tree first.';
 
 /** Stores with the example tree open. */
 async function withExample() {
@@ -60,7 +60,7 @@ describe('export (File menu actions)', () => {
     expect(saved).not.toHaveBeenCalled();
   });
 
-  it('refuses to export a tree with no product', async () => {
+  it('refuses to export a tree with no project', async () => {
     const record = exampleRecord();
     record.doc.nodes = [];
     const { doc } = setupShellStores(record);
@@ -91,24 +91,52 @@ describe('export (File menu actions)', () => {
     expect(saved.mock.calls[1][1]).toBe(full);
   });
 
-  it('exports only the product chosen in the product picker', async () => {
+  it('exports only the project chosen in the project picker', async () => {
     const record = exampleRecord();
-    record.doc.nodes.push({ ...record.doc.nodes[0], id: 900, title: 'Other product', sortOrder: 1, links: [], questions: [] });
+    record.doc.nodes.push({ ...record.doc.nodes[0], id: 900, title: 'Other project', sortOrder: 1, links: [], questions: [] });
     const { doc, tree, ui } = setupShellStores(record);
     await doc.init();
-    const other = tree.nodes.find(n => n.title === 'Other product')!;
+    const other = tree.nodes.find(n => n.title === 'Other project')!;
 
     await exportMarkdown();
-    expect(saved.mock.calls[0][1]).toContain('## Product: Other product');
-    expect(saved.mock.calls[0][1]).toContain('## Product: Meal-planning app');
+    expect(saved.mock.calls[0][1]).toContain('## Project: Other project');
+    expect(saved.mock.calls[0][1]).toContain('## Project: Meal-planning app');
 
-    ui.setProduct(other.id);
+    ui.setProject(other.id);
     await exportMarkdown();
     await exportSvg();
-    expect(saved.mock.calls[1][1]).toContain('## Product: Other product');
+    expect(saved.mock.calls[1][1]).toContain('## Project: Other project');
     expect(saved.mock.calls[1][1]).not.toContain('Meal-planning app\n');
-    expect(saved.mock.calls[2][1]).toContain('>Other product</text>');
+    expect(saved.mock.calls[2][1]).toContain('>Other project</text>');
     expect(saved.mock.calls[2][1]).not.toContain('>Meal-planning app</text>');
+  });
+
+  it('exports the subtree of a focused sub-project, in every format', async () => {
+    const { tree, ui } = await withExample();
+    const shopping = tree.projects.find(p => p.title === 'Shopping list')!;
+    expect(shopping.parent).toBe('project-1');
+    ui.setProject(shopping.id);
+    await exportMarkdown();
+    await exportSvg();
+    const markdown = saved.mock.calls[0][1] as string;
+    expect(markdown).toContain('\n## Project: Shopping list\n\nSub-project of: Meal-planning app\n');
+    expect(markdown).toContain('- **Outcome:** Fewer forgotten ingredients per shop');
+    expect(markdown).not.toContain('Weekly planner');
+    expect(markdown).not.toContain('Households still plan after the first month');
+    const svg = saved.mock.calls[1][1] as string;
+    expect(svg).toContain('>Shopping list</text>');
+    expect(svg).not.toContain('>Weekly planner</text>');
+    expect(svg).not.toContain('>Meal-planning app</text>');
+
+    // All projects: the nested projects are drawn and outlined under their parent.
+    ui.setProject('all');
+    await exportMarkdown();
+    await exportSvg();
+    const all = saved.mock.calls[2][1] as string;
+    expect(all.indexOf('## Project: Meal-planning app')).toBeLessThan(all.indexOf('### Project: Weekly planner'));
+    expect(all.indexOf('### Project: Weekly planner')).toBeLessThan(all.indexOf('### Project: Shopping list'));
+    for (const title of ['Meal-planning app', 'Weekly planner', 'Shopping list'])
+      expect(saved.mock.calls[3][1]).toContain(`>${title}</text>`);
   });
 
   it('saves the tree as a Markdown outline', async () => {
@@ -118,7 +146,7 @@ describe('export (File menu actions)', () => {
     expect(fileName).toBe('Example meal-planning app.md');
     expect(type).toBe('text/markdown;charset=utf-8');
     expect(content).toContain('# Example: meal-planning app\n');
-    expect(content).toContain('- **Outcome:** More people plan a full week of meals');
+    expect(content).toContain('- **Outcome:** More households plan a full week of meals');
     expect(content).toContain('- [x] Who in the household decides?');
     expect(content).toContain('[Interview notes](https://example.com/interview-notes)');
   });

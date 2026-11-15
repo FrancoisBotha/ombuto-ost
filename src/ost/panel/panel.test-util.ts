@@ -11,11 +11,11 @@ import { useOstTreeStore } from '../stores/ost-tree.store';
 import { useOstUiStore } from '../stores/ost-ui.store';
 
 export const PANEL_TREE: TreeNodeDTO[] = [
-  dto('product-1', null, {
+  dto('project-1', null, {
     title: 'Discovery Hub',
-    links: [{ id: 1, name: 'Product page', url: 'https://example.com/product-1' }],
+    links: [{ id: 1, name: 'Project page', url: 'https://example.com/project-1' }],
   }),
-  dto('outcome-1', 'product-1', { title: 'Weekly interviews' }),
+  dto('outcome-1', 'project-1', { title: 'Weekly interviews' }),
   dto('opportunity-1', 'outcome-1', {
     title: 'Hard to find people',
     status: 'EXPLORING',

@@ -8,9 +8,9 @@ import type { Placed } from '../domain/layout';
 import CanvasMinimap from './CanvasMinimap.vue';
 
 describe('CanvasMinimap (overview map)', () => {
-  const nodes = [node('product-1', null), node('outcome-1', 'product-1')];
+  const nodes = [node('project-1', null), node('outcome-1', 'project-1')];
   const placed: Record<string, Placed> = {
-    'product-1': { x: 100, y: 0, w: 200, h: 90 } as Placed,
+    'project-1': { x: 100, y: 0, w: 200, h: 90 } as Placed,
     'outcome-1': { x: 100, y: 156, w: 200, h: 90 } as Placed,
   };
   const mountMap = () =>
@@ -27,7 +27,7 @@ describe('CanvasMinimap (overview map)', () => {
 
   it('draws every laid-out node and the viewport rectangle', () => {
     const w = mountMap();
-    expect(w.find('[data-cy="ost-minimap-node-product-1"]').exists()).toBe(true);
+    expect(w.find('[data-cy="ost-minimap-node-project-1"]').exists()).toBe(true);
     expect(w.find('[data-cy="ost-minimap-node-outcome-1"]').exists()).toBe(true);
     expect(w.find('[data-cy="ost-minimap-view"]').exists()).toBe(true);
   });

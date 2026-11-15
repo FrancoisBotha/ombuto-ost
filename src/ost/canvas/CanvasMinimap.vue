@@ -146,7 +146,7 @@ onBeforeUnmount(stop);
   opacity: 0.8;
   pointer-events: none;
 }
-.ost-minimap__node--product,
+.ost-minimap__node--project,
 .ost-minimap__node--outcome {
   background: var(--color-accent-500);
 }

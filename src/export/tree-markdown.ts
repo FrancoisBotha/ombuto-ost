@@ -2,7 +2,7 @@
  * Tree -> Markdown outline. A pure function: data in, text out.
  *
  *   # Document name
- *   ## Product: Title
+ *   ## Project: Title
  *   - **Outcome:** Title
  *     > notes
  *     - **Opportunity:** Title — status: exploring · priority: 82/100 (High) · value: 4/5 (Strong)
@@ -11,15 +11,28 @@
  *       - Open questions:
  *         - [ ] …
  *       - **Solution:** …
+ *   ### Project: Sub-project title
+ *   Sub-project of: Title
+ *   - **Outcome:** …
+ *
+ * Projects are headings, everything else is a bullet. A top-level project (or the focused project,
+ * when one is focused) is a `##` heading and each level of nesting goes one heading deeper, down to
+ * `######`, where deeper projects stay. Heading depth alone would be ambiguous there, so every
+ * project that sits inside another says so on the line under its heading ("Sub-project of: A › B",
+ * outermost first). A project's own outcomes come before its sub-projects, so the bullets under a
+ * heading always belong to that heading's project.
  *
  * Everything the user typed is escaped, so a title or a note can never change the structure of the
  * outline (or smuggle in HTML).
  */
-import { evidenceStrength } from '@/ost/domain/derive';
+import { breadcrumb, evidenceStrength } from '@/ost/domain/derive';
 import { TYPE_BOX, isSafeLinkUrl, priorityLabel, valueLabel } from '@/ost/domain/rules';
 import type { OstNode } from '@/ost/domain/types';
 
 const INDENT = '  ';
+/** `##` for the projects the outline starts from; Markdown has no heading below `######`. */
+const TOP_HEADING = 2;
+const DEEPEST_HEADING = 6;
 
 /** Characters that would be dropped or misread: control characters other than tab and newline. */
 const stripControl = (text: string): string =>
@@ -112,8 +125,8 @@ function detailLines(node: OstNode): string[] {
 }
 
 /**
- * The outline of the products in `rootIds` (in that order), headed by the document name. Returns
- * null when none of them exists.
+ * The outline of the projects in `rootIds` (in that order) with their sub-projects, headed by the
+ * document name. Returns null when none of them exists.
  */
 export function treeToMarkdown(name: string, nodes: OstNode[], rootIds: string[]): string | null {
   const byId = new Map(nodes.map(n => [n.id, n]));
@@ -130,22 +143,38 @@ export function treeToMarkdown(name: string, nodes: OstNode[], rootIds: string[]
   const out: string[] = [
     `# ${escapeLine(name) || 'Opportunity Solution Tree'}`,
     '',
-    'An Opportunity Solution Tree: product → outcome → opportunity → solution → assumption → evidence.',
+    'An Opportunity Solution Tree: project → outcome → opportunity → solution → assumption → evidence.',
+    'Each heading is a project. A project inside another project has a deeper heading and a "Sub-project of" line naming the projects it sits in.',
     'Each bullet is one node and the bullets nested under it are its children; quoted text is the notes of the node.',
   ];
 
-  for (const root of roots) {
-    out.push('', `## ${TYPE_BOX.product.label}: ${escapeLine(root.title)}`, '');
-    const details = detailLines(root);
+  // Depth-first without recursion, for the project sections and for the bullets inside each: a
+  // very deep tree must not overflow the stack.
+  const sections = roots.map(node => ({ node, level: 0 })).reverse();
+  const seen = new Set<string>();
+  while (sections.length) {
+    const { node: project, level } = sections.pop()!;
+    if (seen.has(project.id)) continue;
+    seen.add(project.id);
+    const heading = '#'.repeat(Math.min(DEEPEST_HEADING, TOP_HEADING + level));
+    out.push('', `${heading} ${TYPE_BOX.project.label}: ${escapeLine(project.title)}`, '');
+    const within = breadcrumb(project.id, byId);
+    if (within.length) out.push(`Sub-project of: ${within.map(p => escapeLine(p.title)).join(' › ')}`, '');
+    const details = detailLines(project);
     // A blank line ends the quoted notes, so the list below cannot be read as part of them.
     const noteCount = details.findIndex(line => !line.startsWith('>'));
     if (noteCount > 0) details.splice(noteCount, 0, '');
     else if (noteCount === -1 && details.length) details.push('');
     out.push(...details);
 
-    // Depth-first without recursion: a very deep tree must not overflow the stack.
-    const stack = (children.get(root.id) ?? []).map(node => ({ node, depth: 0 })).reverse();
-    const seen = new Set<string>([root.id]);
+    const own = children.get(project.id) ?? [];
+    const subProjects = own.filter(child => child.type === 'project');
+    for (let i = subProjects.length - 1; i >= 0; i--) sections.push({ node: subProjects[i], level: level + 1 });
+
+    const stack = own
+      .filter(child => child.type !== 'project')
+      .map(node => ({ node, depth: 0 }))
+      .reverse();
     while (stack.length) {
       const { node, depth } = stack.pop()!;
       if (seen.has(node.id)) continue;

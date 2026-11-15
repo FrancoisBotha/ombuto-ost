@@ -20,7 +20,9 @@ import {
   serializeDocument,
   validateDocument,
 } from './document';
+import { currentNodeKey, currentNodeType } from './legacy';
 import { sampleDocument } from './sample';
+import { legacyFileText, smallDocument } from './small-document.test-util';
 
 /** A minimal valid file as plain JSON data; tests break one thing at a time. */
 const valid = () => ({
@@ -28,7 +30,7 @@ const valid = () => ({
   version: 1,
   name: 'My tree',
   nodes: [
-    { id: 1, type: 'product', parentId: null, title: 'Product' },
+    { id: 1, type: 'project', parentId: null, title: 'Project' },
     { id: 2, type: 'outcome', parentId: 1, title: 'Outcome' },
     {
       id: 3,
@@ -120,9 +122,9 @@ describe('the .ost document format', () => {
       expect(doc.name).toBe('My tree');
       expect(doc.nodes[0]).toEqual({
         id: 1,
-        type: 'product',
+        type: 'project',
         parentId: null,
-        title: 'Product',
+        title: 'Project',
         notes: '',
         status: null,
         confidence: null,
@@ -216,14 +218,14 @@ describe('the .ost document format', () => {
     });
 
     it('refuses more nodes than any real tree has', () => {
-      const nodes = Array.from({ length: MAX_NODES + 1 }, (_, i) => ({ id: i + 1, type: 'product', parentId: null, title: 'Product' }));
+      const nodes = Array.from({ length: MAX_NODES + 1 }, (_, i) => ({ id: i + 1, type: 'project', parentId: null, title: 'Project' }));
       rejects({ ...valid(), nodes }, /more than/);
     });
 
     it('accepts a tree exactly MAX_DEPTH levels deep and refuses one level more, without recursing', () => {
       const chain = (levels: number) => {
         const nodes: Record<string, unknown>[] = [
-          { id: 1, type: 'product', parentId: null, title: 'Product' },
+          { id: 1, type: 'project', parentId: null, title: 'Project' },
           { id: 2, type: 'outcome', parentId: 1, title: 'Outcome' },
         ];
         for (let id = 3; id <= levels; id++) {
@@ -258,7 +260,7 @@ describe('the .ost document format', () => {
       // 600 nodes of 20,000 astral characters: 24 MB of notes once written as UTF-8.
       const notes = '😀'.repeat(10000);
       const nodes = [
-        { id: 1, type: 'product', parentId: null, title: 'Product' },
+        { id: 1, type: 'project', parentId: null, title: 'Project' },
         ...Array.from({ length: 600 }, (_, i) => ({ id: i + 2, type: 'outcome', parentId: 1, title: 'Outcome', notes })),
       ];
       rejects({ ...valid(), nodes }, /more text than/);
@@ -275,7 +277,7 @@ describe('the .ost document format', () => {
     });
 
     it('refuses a broken structure', () => {
-      rejects(withNode(0, { parentId: 2 }), /is a product but has a parent/);
+      rejects(withNode(0, { parentId: 2 }), /node 1 is a project under a outcome, which is not allowed/);
       rejects(withNode(1, { parentId: null }), /node 2 has no valid parentId/);
       rejects(withNode(1, { parentId: 99 }), /refers to a parent \(99\) that is not in the file/);
       rejects(withNode(3, { parentId: 2 }), /is a solution under a outcome, which is not allowed/);
@@ -290,6 +292,16 @@ describe('the .ost document format', () => {
       );
       rejects(file, /loop of parents/);
       rejects(withNode(2, { parentId: 3 }), /loop of parents/);
+    });
+
+    it('refuses a loop of projects', () => {
+      const file = valid();
+      file.nodes.push(
+        { id: 10, type: 'project', parentId: 11, title: 'Loop A' },
+        { id: 11, type: 'project', parentId: 10, title: 'Loop B' },
+      );
+      rejects(file, /loop of parents/);
+      rejects(withNode(0, { parentId: 1 }), /loop of parents/);
     });
 
     it('refuses titles outside the limits of their type', () => {
@@ -309,7 +321,7 @@ describe('the .ost document format', () => {
       rejects(withNode(2, { status: 'candidate' }), /needs a status that is one of: unexplored, exploring, validated, parked/);
       rejects(withNode(2, { status: 'EXPLORING' }));
       rejects(withNode(3, { status: undefined }));
-      rejects(withNode(0, { status: 'exploring' }), /status, which does not apply to product nodes/);
+      rejects(withNode(0, { status: 'exploring' }), /status, which does not apply to project nodes/);
       rejects(withNode(4, { confidence: 101 }), /confidence between 0 and 100/);
       rejects(withNode(4, { confidence: 40.5 }));
       rejects(withNode(4, { confidence: '40' }));
@@ -395,7 +407,7 @@ describe('the .ost document format', () => {
 
   describe('new nodes', () => {
     it('start with the first status of their type and the default numbers', () => {
-      expect(newNodeFields('product')).toEqual({ status: null, confidence: null, priority: null, valueRating: null, owner: null });
+      expect(newNodeFields('project')).toEqual({ status: null, confidence: null, priority: null, valueRating: null, owner: null });
       expect(newNodeFields('opportunity')).toEqual({ status: 'unexplored', confidence: null, priority: 50, valueRating: 3, owner: null });
       expect(newNodeFields('solution').status).toBe('candidate');
       expect(newNodeFields('assumption')).toMatchObject({ status: 'untested', confidence: 40 });
@@ -405,6 +417,103 @@ describe('the .ost document format', () => {
     it('get a default title', () => {
       expect(defaultTitle('opportunity')).toBe('New opportunity');
       expect(defaultTitle('evidence')).toBe('New snippet');
+    });
+  });
+  describe('projects inside projects', () => {
+    /** project 1 > (outcome 2 > …, project 7 > (outcome 8, project 9)), plus project 10 at the top. */
+    const nested = () => {
+      const file = valid();
+      file.nodes.push(
+        { id: 7, type: 'project', parentId: 1, title: 'Sub-project' },
+        { id: 8, type: 'outcome', parentId: 7, title: 'Its outcome' },
+        { id: 9, type: 'project', parentId: 7, title: 'Sub-sub-project', sortOrder: 0 },
+        { id: 10, type: 'project', parentId: null, title: 'Another top-level project', sortOrder: 1 },
+      );
+      return file;
+    };
+
+    it('a project may be at the top or under another project, with projects and outcomes mixed beneath it', () => {
+      const doc = validateDocument(nested());
+      expect(doc.nodes.filter(n => n.type === 'project').map(n => [n.id, n.parentId])).toEqual([
+        [1, null],
+        [7, 1],
+        [9, 7],
+        [10, null],
+      ]);
+      expect(doc.nodes.filter(n => n.parentId === 1).map(n => n.type)).toEqual(['outcome', 'project']);
+      // What is written is read back unchanged.
+      expect(parseDocument(serializeDocument(doc))).toEqual(doc);
+    });
+
+    it('only a project holds a project, and only a project may have no parent', () => {
+      for (const parentId of [2, 3, 4, 5, 6]) {
+        const file = nested();
+        Object.assign(file.nodes[6], { parentId });
+        rejects(file, /node 7 is a project under a \w+, which is not allowed/);
+      }
+      const orphan = nested();
+      Object.assign(orphan.nodes[7], { parentId: null });
+      rejects(orphan, /node 8 has no valid parentId/);
+    });
+
+    it('nested projects count towards the depth limit', () => {
+      const chain = (levels: number) => ({
+        ...valid(),
+        nodes: Array.from({ length: levels }, (_, i) => ({
+          id: i + 1,
+          type: 'project',
+          parentId: i === 0 ? null : i,
+          title: `Level ${i + 1}`,
+        })),
+      });
+      expect(validateDocument(chain(MAX_DEPTH)).nodes).toHaveLength(MAX_DEPTH);
+      rejects(chain(MAX_DEPTH + 1), /more than 64 levels deep/);
+    });
+  });
+
+  describe('files from the first published build ("product" instead of "project")', () => {
+    it('opens them: every product is a project, everything else is as it was', () => {
+      const now = new Date('2026-01-02T03:04:05Z');
+      const text = legacyFileText(now);
+      expect(JSON.parse(text).nodes[0]).toMatchObject({ id: 1, type: 'product', parentId: null });
+      expect(parseDocument(text)).toEqual(smallDocument(now));
+    });
+
+    it('still reads version 1, and writes "project" from then on', () => {
+      const file = valid();
+      file.nodes[0].type = 'product';
+      const doc = validateDocument(file);
+      expect(doc.version).toBe(1);
+      expect(doc.nodes[0]).toMatchObject({ id: 1, type: 'project', parentId: null });
+      const written = serializeDocument(doc);
+      expect(written).toContain('"type": "project"');
+      expect(written).not.toContain('product');
+    });
+
+    it('applies the rules of a project to them', () => {
+      const file = valid();
+      file.nodes[0].type = 'product';
+      rejects({ ...file, nodes: [{ ...file.nodes[0], title: 'p'.repeat(101) }] }, /needs a title of 2 to 100 characters/);
+      rejects({ ...file, nodes: [{ ...file.nodes[0], status: 'exploring' }] }, /does not apply to project nodes/);
+      // A product under a product is simply a project under a project.
+      file.nodes.push({ id: 7, type: 'product', parentId: 1, title: 'Inner' });
+      expect(validateDocument(file).nodes.at(-1)).toMatchObject({ type: 'project', parentId: 1 });
+    });
+
+    it('maps that one name only: other unknown types are still refused', () => {
+      for (const type of ['Product', 'PRODUCT', 'products', 'programme', '']) rejects(withNode(0, { type }), /has an unknown type/);
+    });
+
+    it('the mapping itself: type names and remembered node keys', () => {
+      expect(currentNodeType('product')).toBe('project');
+      expect(currentNodeType('project')).toBe('project');
+      expect(currentNodeType('outcome')).toBe('outcome');
+      expect(currentNodeType('toString')).toBe('toString');
+      expect(currentNodeType(7)).toBe(7);
+      expect(currentNodeKey('product-12')).toBe('project-12');
+      expect(currentNodeKey('project-12')).toBe('project-12');
+      expect(currentNodeKey('opportunity-3')).toBe('opportunity-3');
+      expect(currentNodeKey('product')).toBe('product');
     });
   });
 });

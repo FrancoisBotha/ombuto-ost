@@ -20,11 +20,11 @@ describe('OST error messages', () => {
 
   it('states the title rule of the node type when one is given', () => {
     const invalid = new RuleError('invalidtitle');
-    expect(describeError(invalid, undefined, 'product')).toBe('Product names need 2 to 100 characters.');
+    expect(describeError(invalid, undefined, 'project')).toBe('Project names need 2 to 100 characters.');
     expect(describeError(invalid, undefined, 'opportunity')).toBe('Titles need 2 to 200 characters.');
     expect(describeError(invalid, undefined, 'evidence')).toBe('Titles need 2 to 500 characters.');
     // Without a type the general rule is stated.
-    expect(describeError(invalid)).toBe('Titles need 2 to 200 characters (100 for products, 500 for assumptions and evidence).');
+    expect(describeError(invalid)).toBe('Titles need 2 to 200 characters (100 for projects, 500 for assumptions and evidence).');
   });
 
   it('falls back to the given sentence for anything that is not a rule', () => {

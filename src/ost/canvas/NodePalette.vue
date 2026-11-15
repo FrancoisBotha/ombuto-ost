@@ -65,7 +65,7 @@
 /**
  * Left node palette (182px, collapses to a 34px rail).
  *
- * Two ways to attach a new node:
+ * Two ways to attach a new node (a project from here is a sub-project; the toolbar adds top-level ones):
  * - drag a type (5px threshold) onto a node: the ghost chip follows the cursor, legal targets are
  *   highlighted by the canvas, dropping on a legal node attaches, anywhere else does nothing;
  * - click a type to arm it (click it again, or Escape, to disarm), then click or press Enter on a
@@ -318,6 +318,10 @@ onBeforeUnmount(() => {
   border-radius: 3px;
   background: transparent;
   border: 1px solid var(--color-accent-500);
+}
+.ost-palette__swatch--project {
+  background: var(--color-accent-900);
+  border-color: var(--color-accent-700);
 }
 .ost-palette__swatch--outcome {
   background: var(--color-accent-900);

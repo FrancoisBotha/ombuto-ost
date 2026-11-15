@@ -75,7 +75,7 @@ describe('OstShell', () => {
   });
 
   describe('empty state', () => {
-    it('New tree, Open file and Load example each start their action', async () => {
+    it('New tree, Open file and Open example each start their action', async () => {
       const { pinia, doc } = setupShellStores();
       const w = await mountShell(OstShell, pinia, stubs);
       const request = vi.spyOn(doc, 'request');
@@ -93,7 +93,7 @@ describe('OstShell', () => {
       await flushPromises();
       expect(w.find('[data-cy="canvas-stub"]').exists()).toBe(true);
       expect((w.get('[data-cy="ost-doc-name"]').element as HTMLInputElement).value).toBe('Untitled tree');
-      expect(tree.products).toHaveLength(1);
+      expect(tree.projects).toHaveLength(1);
     });
 
     it('never says "upload"', async () => {
@@ -119,7 +119,7 @@ describe('OstShell', () => {
     async function dirtyShell() {
       const ctx = setupShellStores(exampleRecord());
       const w = await mountShell(OstShell, ctx.pinia, stubs);
-      await ctx.tree.patchNode('product-1', { title: 'Unsaved work' });
+      await ctx.tree.patchNode('project-1', { title: 'Unsaved work' });
       await flushPromises();
       return { ...ctx, w };
     }
@@ -141,7 +141,7 @@ describe('OstShell', () => {
       await w.get('[data-cy="ostUnsavedCancel"]').trigger('click');
       await flushPromises();
       expect(w.find('[data-cy="ostUnsavedDialog"]').exists()).toBe(false);
-      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
     });
 
     it("Don't save discards and carries on; Save saves first", async () => {
@@ -173,10 +173,11 @@ describe('OstShell', () => {
       const { w, doc, tree } = await dirtyShell();
       await doc.request('example');
       await flushPromises();
+      expect(w.get('[data-cy="ostUnsavedText"]').text()).toContain('Opening the example without saving loses them.');
       await w.get('[data-cy="ostUnsavedDialog"]').trigger('keydown', { key: 'Escape' });
       await flushPromises();
       expect(doc.pendingAction).toBeNull();
-      expect(tree.byId('product-1')?.title).toBe('Unsaved work');
+      expect(tree.byId('project-1')?.title).toBe('Unsaved work');
     });
 
     it('closing the tab asks first only while there are unsaved changes', async () => {
@@ -284,19 +285,19 @@ describe('OstShell', () => {
       const w = await mountShell(OstShell, pinia, stubs);
       expect(doc.dirty).toBe(false);
       // A field holding text the document does not have yet.
-      const unregister = registerPendingEdit(() => void tree.patchNode('product-1', { note: 'typed, not blurred' }));
+      const unregister = registerPendingEdit(() => void tree.patchNode('project-1', { note: 'typed, not blurred' }));
       window.dispatchEvent(key('o', { ctrlKey: true }));
       await flushPromises();
       unregister();
       expect(io.pickFileToOpen).not.toHaveBeenCalled();
       expect(w.find('[data-cy="ostUnsavedDialog"]').exists()).toBe(true);
-      expect(tree.byId('product-1')?.note).toBe('typed, not blurred');
+      expect(tree.byId('project-1')?.note).toBe('typed, not blurred');
     });
 
     it('shortcuts wait while the unsaved-changes question is open', async () => {
       const { pinia, doc, tree } = setupShellStores(exampleRecord());
       await mountShell(OstShell, pinia, stubs);
-      await tree.patchNode('product-1', { title: 'Unsaved work' });
+      await tree.patchNode('project-1', { title: 'Unsaved work' });
       await doc.request('new');
       const save = vi.spyOn(doc, 'save');
       window.dispatchEvent(key('s', { ctrlKey: true }));
@@ -323,7 +324,7 @@ describe('OstShell', () => {
     it('shows a refused tree edit the same way', async () => {
       const { pinia, tree } = setupShellStores(exampleRecord());
       const w = await mountShell(OstShell, pinia, stubs);
-      await tree.moveNode('solution-6', 'outcome-2');
+      await tree.moveNode('solution-7', 'outcome-3');
       await flushPromises();
       expect(w.get('[data-cy="ostError"]').text()).toContain('That node cannot go there.');
       await w.get('[data-cy="ostErrorDismiss"]').trigger('click');

@@ -51,11 +51,11 @@ export function dto(key: string, parentKey: string | null, extra: Partial<TreeNo
   };
 }
 
-/** A small tree: two products, outcome, nested opportunities, solution with assumptions and evidence. */
+/** A small tree: two projects, outcome, nested opportunities, solution with assumptions and evidence. */
 export function sampleNodes(): OstNode[] {
   return [
-    node('product-1', null, { sortOrder: 1 }),
-    node('outcome-1', 'product-1'),
+    node('project-1', null, { sortOrder: 1 }),
+    node('outcome-1', 'project-1'),
     node('opportunity-1', 'outcome-1', { status: 'exploring', priority: 80, value: 4 }),
     node('opportunity-2', 'opportunity-1', { status: 'unexplored', sortOrder: 0 }),
     node('solution-1', 'opportunity-1', { status: 'candidate' }),
@@ -64,23 +64,23 @@ export function sampleNodes(): OstNode[] {
     node('assumption-3', 'solution-1', { status: 'testing', conf: 60, sortOrder: 2 }),
     node('evidence-1', 'opportunity-1', { createdDate: '2026-09-10T08:00:00Z' }),
     node('evidence-2', 'assumption-3', { createdDate: '2026-08-10T08:00:00Z' }),
-    node('product-2', null, { sortOrder: 2 }),
+    node('project-2', null, { sortOrder: 2 }),
   ];
 }
 
 /**
- * A large, realistic tree for performance smoke tests: `products` products, each with one outcome,
+ * A large, realistic tree for performance smoke tests: `projects` projects, each with one outcome,
  * `opportunities` opportunities, 2 solutions per opportunity, 2 assumptions per solution and one
- * evidence per assumption (1 + 1 + o * (1 + 2 * (1 + 2 * 2)) nodes per product).
+ * evidence per assumption (1 + 1 + o * (1 + 2 * (1 + 2 * 2)) nodes per project).
  */
-export function bigTreeDtos(products = 2, opportunities = 15): TreeNodeDTO[] {
+export function bigTreeDtos(projects = 2, opportunities = 15): TreeNodeDTO[] {
   const out: TreeNodeDTO[] = [];
   let id = 1;
-  for (let p = 0; p < products; p++) {
-    const product = `product-${id++}`;
-    out.push(dto(product, null, { sortOrder: p }));
+  for (let p = 0; p < projects; p++) {
+    const project = `project-${id++}`;
+    out.push(dto(project, null, { sortOrder: p }));
     const outcome = `outcome-${id++}`;
-    out.push(dto(outcome, product));
+    out.push(dto(outcome, project));
     for (let o = 0; o < opportunities; o++) {
       const opportunity = `opportunity-${id++}`;
       out.push(dto(opportunity, outcome, { status: 'EXPLORING', priority: 50, valueRating: 3, sortOrder: o }));

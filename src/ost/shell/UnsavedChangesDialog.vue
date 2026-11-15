@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 /**
- * Asked before New tree / Open file / Load example replaces a document that has changes not yet
+ * Asked before New tree / Open file / Open example replaces a document that has changes not yet
  * saved to a file: Cancel, Don't save, or Save (which carries on only when the save went through).
  *
  * Where Save can only download a copy (no save picker in this browser), the app cannot see whether
@@ -50,7 +50,7 @@ import OstDialog from '../overlays/OstDialog.vue';
 const CONSEQUENCE: Record<ReplaceAction, string> = {
   new: 'Starting a new tree',
   open: 'Opening another file',
-  example: 'Loading the example',
+  example: 'Opening the example',
 };
 
 const doc = useDocumentStore();

@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
 
+import { currentNodeKey } from '@/doc/legacy';
+
 import type { PanelTab } from '../domain/derive';
 import type { NodeType } from '../domain/types';
 
@@ -19,8 +21,8 @@ export interface OstUiState {
   panelTab: PanelTab;
   leftOpen: boolean;
   rightOpen: boolean;
-  /** 'all' or a product node key */
-  productId: string | 'all';
+  /** 'all', or the key of the project (top-level or nested) whose subtree the canvas shows */
+  projectId: string | 'all';
   collapsed: Record<string, boolean>;
   query: string;
   hiddenTypes: Partial<Record<NodeType, boolean>>;
@@ -41,7 +43,7 @@ const initialState = (): OstUiState => ({
   panelTab: 'detail',
   leftOpen: true,
   rightOpen: true,
-  productId: 'all',
+  projectId: 'all',
   collapsed: {},
   query: '',
   hiddenTypes: {},
@@ -84,8 +86,8 @@ export const useOstUiStore = defineStore('ostUi', {
     },
 
     // ---- scope / filters ------------------------------------------------------------------
-    setProduct(productId: string | 'all') {
-      this.productId = productId || 'all';
+    setProject(projectId: string | 'all') {
+      this.projectId = projectId || 'all';
     },
     setQuery(query: string) {
       this.query = query;
@@ -116,7 +118,10 @@ export const useOstUiStore = defineStore('ostUi', {
       try {
         const raw = localStorage.getItem(collapsedKey);
         const parsed = raw ? JSON.parse(raw) : {};
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) restored = parsed;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          // Keys remembered by the first published build name projects by their old type (doc/legacy.ts).
+          restored = Object.fromEntries(Object.entries(parsed).map(([key, value]) => [currentNodeKey(key), value === true]));
+        }
       } catch {
         restored = {};
       }
@@ -197,7 +202,7 @@ export const useOstUiStore = defineStore('ostUi', {
       if (this.addMenuId && keys.has(this.addMenuId)) this.addMenuId = null;
       if (this.confirmId && keys.has(this.confirmId)) this.confirmId = null;
       if (this.dropTargetId && keys.has(this.dropTargetId)) this.dropTargetId = null;
-      if (this.productId !== 'all' && keys.has(this.productId)) this.productId = 'all';
+      if (this.projectId !== 'all' && keys.has(this.projectId)) this.projectId = 'all';
       if (Object.keys(this.collapsed).some(k => keys.has(k))) {
         this.collapsed = Object.fromEntries(Object.entries(this.collapsed).filter(([k]) => !keys.has(k)));
         this.persistCollapsed();

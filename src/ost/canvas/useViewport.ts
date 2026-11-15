@@ -69,7 +69,7 @@ export const stepZoom = (viewport: Viewport, size: Size, direction: 1 | -1): Vie
 /**
  * Fit: frame the laid-out branch. Zoom = the smaller of width/height ratios, floored at 0.68 and
  * capped at 1.1. When the branch is wider than the canvas at that zoom, centre on the roots
- * instead of the bounding box so the product(s) stay in view. Null when nothing is laid out.
+ * instead of the bounding box so the project(s) stay in view. Null when nothing is laid out.
  */
 export function fitViewport(placed: Record<string, Placed>, rootIds: string[], size: Size): Viewport | null {
   const boxes = Object.values(placed);

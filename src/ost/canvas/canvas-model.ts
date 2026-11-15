@@ -1,7 +1,7 @@
 /*
  * Pure mapping from the derived layout to Vue Flow elements. Positions ALWAYS come from the tidy
- * layout (layoutTree): users never place a node. Collapsed subtrees and out-of-scope products are
- * simply absent from `placed`, so they are absent here too.
+ * layout (layoutTree): users never place a node. Collapsed subtrees and everything outside the
+ * focused project are simply absent from `placed`, so they are absent here too.
  */
 import type { Edge, Node } from '@vue-flow/core';
 
@@ -31,8 +31,8 @@ export function edgeKind(childType: NodeType): OstEdgeKind {
 export const laidOutNodes = (nodes: OstNode[], placed: Record<string, Placed>): OstNode[] => nodes.filter(n => placed[n.id]);
 
 /**
- * `draggable` decides per node whether it can be dragged onto another to re-parent (never
- * products). Dragging never places a node: the canvas resets positions after every drag.
+ * `draggable` decides per node whether it can be dragged onto another to re-parent (not while it
+ * is being renamed). Dragging never places a node: the canvas resets positions after every drag.
  * Vue Flow's own wrapper stays unfocusable — the node body (OstNode) is the focus target.
  *
  * `isNew` says which nodes Vue Flow has not been given before. Those carry the size of their
@@ -90,9 +90,6 @@ export function pinRendered(
 
 /** layoutTree gives the CENTRE x and the TOP y; Vue Flow wants the top-left corner. */
 export const flowPosition = (p: Placed) => ({ x: p.x - p.w / 2, y: p.y });
-
-/** May this node be dragged to re-parent it? Products have no parent to change. */
-export const isDraggable = (n: Pick<OstNode, 'type'>): boolean => n.type !== 'product';
 
 export function toFlowEdges(visible: OstNode[], placed: Record<string, Placed>): Edge<OstEdgeData>[] {
   const edges: Edge<OstEdgeData>[] = [];

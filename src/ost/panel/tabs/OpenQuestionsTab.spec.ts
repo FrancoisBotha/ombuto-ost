@@ -49,7 +49,7 @@ describe('OpenQuestionsTab', () => {
   });
 
   it('an opportunity without questions says so and still takes a first one', async () => {
-    const ctx = await setupStores([dto('product-1', null), dto('outcome-1', 'product-1'), dto('opportunity-1', 'outcome-1')]);
+    const ctx = await setupStores([dto('project-1', null), dto('outcome-1', 'project-1'), dto('opportunity-1', 'outcome-1')]);
     ctx.service.addQuestion.resolves({ id: 1, text: 'Who is this for?', done: false });
     const wrapper = await mountWith(OpenQuestionsTab, ctx.pinia, { nodeKey: 'opportunity-1' });
     expect(wrapper.get('[data-cy="ost-questions-empty"]').text()).toBe('No open questions yet.');

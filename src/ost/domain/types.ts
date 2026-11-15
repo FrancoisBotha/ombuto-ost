@@ -4,9 +4,9 @@
  * - `id` is the node key ("opportunity-12"); `dbId` carries the numeric id stored in the file.
  * - links and questions carry their ids so they can be edited and removed.
  */
-export type NodeType = 'product' | 'outcome' | 'opportunity' | 'solution' | 'assumption' | 'evidence';
+export type NodeType = 'project' | 'outcome' | 'opportunity' | 'solution' | 'assumption' | 'evidence';
 
-export const NODE_TYPES: NodeType[] = ['product', 'outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
+export const NODE_TYPES: NodeType[] = ['project', 'outcome', 'opportunity', 'solution', 'assumption', 'evidence'];
 
 export interface LinkRef {
   id?: number;
@@ -26,7 +26,7 @@ export interface OstNode {
   /** Numeric id of the node in the document (unique across the whole file). */
   dbId: number;
   type: NodeType;
-  /** Parent node key; null for products. */
+  /** Parent node key; null for a top-level project. */
   parent: string | null;
   title: string;
   note: string;

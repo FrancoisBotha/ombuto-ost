@@ -44,7 +44,7 @@ describe('touch targets', () => {
       ['panel/PanelTabs.vue', 'ost-tabs__tab ost-hit'],
       ['canvas/NodePalette.vue', 'ost-palette__hide ost-hit'],
       ['canvas/NodePalette.vue', 'ost-palette-rail__open ost-hit'],
-      ['canvas/CanvasProductCombo.vue', 'ost-product-combo__button ost-hit'],
+      ['canvas/CanvasProjectCombo.vue', 'ost-project-combo__button ost-hit'],
       ['panel/fields/ValueScale.vue', 'ost-value__step ost-hit'],
       ['panel/DetailPanel.vue', 'ost-panel__crumb ost-hit'],
       ['shell/FileMenu.vue', 'ost-file-menu__button ost-hit'],

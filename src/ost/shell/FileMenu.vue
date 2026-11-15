@@ -26,6 +26,16 @@
         type="button"
         role="menuitem"
         class="ost-file-menu__item"
+        title="Open the built-in example tree as a new, unsaved tree"
+        data-cy="ost-file-example"
+        @click="run(() => doc.request('example'))"
+      >
+        <span>Open example</span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        class="ost-file-menu__item"
         :disabled="!doc.hasDocument"
         :title="doc.savesInPlace ? `Save to ${doc.fileName}` : 'Save to your computer'"
         data-cy="ost-file-save"
@@ -90,7 +100,10 @@
 
 <script setup lang="ts">
 /**
- * The File menu: New tree, Open file, Save, Save as, and Export ▸ PNG / SVG / Markdown.
+ * The File menu: New tree, Open file, Open example, Save, Save as, and Export ▸ PNG / SVG / Markdown.
+ *
+ * New tree, Open file and Open example all replace the document through `doc.request`, which takes
+ * in text still being typed and asks about unsaved changes first.
  *
  * The export items call `exportPng` / `exportSvg` / `exportMarkdown` from '@/export' with no
  * arguments; a rejected promise is shown as an error toast (its Error message, when it has one).
